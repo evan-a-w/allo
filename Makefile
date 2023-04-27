@@ -7,3 +7,5 @@ all: $(NAME)
 $(NAME): $(NAME).c $(NAME).h
 	$(CC) $(CFLAGS) $(NAME).c -o $(NAME)
 
+clean:
+	rm -f $(NAME) *.o
