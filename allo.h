@@ -1,5 +1,114 @@
 #ifndef ALLO_H
 #define ALLO_H
 
+#include <stdint.h>
+#include <stddef.h>
+
+#include "stats.h"
+
+// Arenas are allocated for all sizes <= 1024 bytes.
+// sizes are powers of two when >= 124 bytes
+#define MAX_ARENA_SIZE (1 << 10)
+
+#define PAGE_SIZE 4096
+
+// How much arenas grow by
+#define ARENA_SIZE 4096
+
+// each heap
+#define HEAP_SIZE (PAGE_SIZE * 32)
+
+// 16 bytes
+#define MIN_ALLOC_SIZE (sizeof(struct arena_free_chunk))
+
+// directly mmap requests >= this size
+#define MIN_MMAP (HEAP_SIZE - sizeof(struct heap) - PAGE_SIZE)
+
+// 5 bits of flags
+#define CHUNK_SIZE_ALIGN (1 << 5)
+// 3 bits of flags
+#define ARENA_SIZE_ALIGN (1 << 3)
+
+#define ROUND_SIZE_TO_ALIGN(x) (((x) + CHUNK_SIZE_ALIGN - 1) & ~(CHUNK_SIZE_ALIGN - 1))
+
+#define CHUNK_SIZE(status) ((status) & ~(CHUNK_SIZE_ALIGN - 1))
+#define ARENA_CHUNK_SIZE(status) ((status) & ~7)
+
+typedef struct chunk {
+    size_t status;
+    char data[];
+} chunk;
+
+typedef struct mmapped_chunk {
+    struct mmapped_chunk *prev;
+    struct mmapped_chunk *next;
+    size_t status;
+    char data[];
+} mmapped_chunk;
+
+enum chunk_status {
+    ARENA = 1,
+    FREE = 2,
+    RED = 4,
+    TREE = 8,
+    MMAPPED = 16,
+};
+
+#define IS_ARENA(status) ((status)&ARENA)
+#define IS_RED(status) ((status)&RED)
+#define IS_TREE(status) ((status)&TREE)
+#define IS_FREE(status) ((status)&FREE)
+#define IS_MMAPPED(status) ((status)&MMAPPED)
+
+typedef struct free_chunk {
+    size_t status;
+    struct chunk *prev_absolute;
+    struct chunk *next_absolute;
+} free_chunk;
+
+// sorted in an rb tree
+typedef struct free_chunk_tree {
+    size_t status;
+    struct chunk *prev_absolute;
+    struct chunk *next_absolute;
+    struct free_chunk_list *next_of_size;
+    struct free_chunk_tree *left;
+    struct free_chunk_tree *right;
+} free_chunk_tree;
+
+typedef struct free_chunk_list {
+    size_t status;
+    struct chunk *prev_absolute;
+    struct chunk *next_absolute;
+    struct free_chunk_list *next_of_size;
+    struct free_chunk *prev_of_size;
+} free_chunk_list;
+
+typedef struct arena_free_chunk {
+    size_t size;
+    struct arena_free_chunk *next;
+} arena_free_chunk;
+
+// malloc larger blocks to subdivide for the arenas
+typedef struct arena_block {
+    uint64_t status;
+    struct arena_block *prev;
+    struct arena_block *next;
+    struct arena_free_chunk *free_list;
+} arena_block;
+
+typedef struct heap {
+    struct heap *prev;
+    struct heap *next;
+    uint64_t allocated_bytes;
+    free_chunk free_chunks[];
+} heap;
+
+typedef struct allocator {
+    stats stats;
+    heap *heap_head;
+    heap *heap_tail;
+    free_chunk_tree *free_chunk_tree;
+} allocator;
 
 #endif

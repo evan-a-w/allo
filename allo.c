@@ -7,122 +7,29 @@
 #include <sys/mman.h>
 
 #include "stats.h"
+#include "rb_tree.h"
 
-// Arenas are allocated for all sizes <= 1024 bytes.
-// sizes are powers of two when >= 124 bytes
-#define MAX_ARENA_SIZE (1 << 10)
-
-#define PAGE_SIZE 4096
-
-// How much arenas grow by
-#define ARENA_SIZE 4096
-
-// each heap
-#define HEAP_SIZE (PAGE_SIZE * 32)
-
-// 16 bytes
-#define MIN_ALLOC_SIZE (sizeof(struct arena_free_chunk))
-
-// directly mmap requests >= this size
-#define MIN_MMAP (HEAP_SIZE - sizeof(struct heap) - PAGE_SIZE)
-
-// 5 bits of flags
-#define CHUNK_SIZE_ALIGN (1 << 5)
-// 3 bits of flags
-#define ARENA_SIZE_ALIGN (1 << 3)
-
-#define ROUND_SIZE_TO_ALIGN(x) (((x) + CHUNK_SIZE_ALIGN - 1) & ~(CHUNK_SIZE_ALIGN - 1))
-
-#define CHUNK_SIZE(status) ((status) & ~(CHUNK_ALIGN - 1))
-#define ARENA_CHUNK_SIZE(status) ((status) & ~7)
-
-typedef struct chunk {
-    size_t status;
-    char data[];
-} chunk;
-
-typedef struct mmapped_chunk {
-    struct mmapped_chunk *prev;
-    struct mmapped_chunk *next;
-    size_t status;
-    char data[];
-} mmapped_chunk;
-
-enum chunk_status {
-    ARENA = 1,
-    FREE = 2,
-    RED = 4,
-    TREE = 8,
-    MMAPPED = 16,
-};
-
-#define IS_ARENA(status) ((status)&ARENA)
-#define IS_RED(status) ((status)&RED)
-#define IS_TREE(status) ((status)&TREE)
-#define IS_FREE(status) ((status)&FREE)
-#define IS_MMAPPED(status) ((status)&MMAPPED)
-
-typedef struct free_chunk {
-    size_t status;
-    struct chunk *prev_absolute;
-    struct chunk *next_absolute;
-} free_chunk;
-
-// sorted in an rb tree
-typedef struct free_chunk_tree {
-    size_t status;
-    struct chunk *prev_absolute;
-    struct chunk *next_absolute;
-    struct free_chunk_list *next_of_size;
-    struct free_chunk_tree *left;
-    struct free_chunk_tree *right;
-} free_chunk_tree;
-
-typedef struct free_chunk_list {
-    size_t status;
-    struct chunk *prev_absolute;
-    struct chunk *next_absolute;
-    struct free_chunk_list *next_of_size;
-    struct free_chunk *prev_of_size;
-} free_chunk_list;
-
-typedef struct arena_free_chunk {
-    size_t size;
-    struct arena_free_chunk *next;
-} arena_free_chunk;
-
-// malloc larger blocks to subdivide for the arenas
-typedef struct arena_block {
-    uint64_t status;
-    struct arena_block *prev;
-    struct arena_block *next;
-    struct arena_free_chunk *free_list;
-} arena_block;
-
-typedef struct heap {
-    struct heap *prev;
-    struct heap *next;
-    uint64_t allocated_bytes;
-} heap;
-
-heap *round_to_heap(void *p) {
-    return (heap *) ((uint64_t) p & ~(HEAP_SIZE - 1));
-}
-
-typedef struct allocator {
-    stats stats;
-    heap *heap_list;
-} allocator;
-
-void add_heap(allocator *a) {
-    heap *h = mmap(NULL, HEAP_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    h->next = a->heap_list;
-    h->prev = NULL;
-    if (a->heap_list != NULL) {
-        a->heap_list->prev = h;
+free_chunk *add_heap(allocator *a) {
+    heap *h = mmap(NULL, HEAP_SIZE, PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    h->prev = a->heap_tail;
+    h->next = NULL;
+    if (a->heap_tail != NULL) {
+        a->heap_tail->next = h;
     }
-    a->heap_list = h;
+    a->heap_tail = h;
+    if (a->heap_head == NULL) {
+        a->heap_head = h;
+    }
     a->stats.total_heap_size += HEAP_SIZE;
+
+    free_chunk *res = h->free_chunks;
+    *res = (free_chunk){
+        .status = HEAP_SIZE - sizeof(heap) - sizeof(chunk),
+        .prev_absolute = NULL,
+        .next_absolute = NULL,
+    };
+    return res;
 }
 
 uint64_t round_to_alloc_size_without_metadata(size_t n) {
@@ -158,7 +65,8 @@ uint64_t get_arena_bucket(uint64_t status) {
 
 void *allo_cate_mmaped(allocator *a, size_t size) {
     size_t to_alloc = size + sizeof(struct mmapped_chunk);
-    mmapped_chunk *c = mmap(NULL, to_alloc, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    mmapped_chunk *c = mmap(NULL, to_alloc, PROT_READ | PROT_WRITE,
+                            MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     c->status = size | MMAPPED;
     c->prev = NULL;
     c->next = NULL;
@@ -171,6 +79,10 @@ void *allo_cate_arena(allocator *a, size_t to_alloc) {
     return NULL;
 }
 
+heap *round_to_heap(void *p) {
+    return (heap *)((uint64_t)p & ~(HEAP_SIZE - 1));
+}
+
 void *allo_cate(allocator *a, size_t size) {
     size_t to_alloc = round_to_alloc_size_without_metadata(size);
     if (to_alloc <= MAX_ARENA_SIZE) {
@@ -180,7 +92,50 @@ void *allo_cate(allocator *a, size_t size) {
     }
 
     // standard allocation
-    return NULL;
+    free_chunk_tree *best_fit_node = rb_tree_search(a->free_chunk_tree, size);
+
+    free_chunk *best_fit;
+    if (best_fit_node == NULL) {
+        best_fit = add_heap(a);
+    } else if (best_fit_node->next_of_size == NULL) {
+        best_fit = (free_chunk *)best_fit_node;
+        a->free_chunk_tree = rb_tree_remove(a->free_chunk_tree,
+                                            CHUNK_SIZE(best_fit_node->status));
+    } else {
+        best_fit = (free_chunk *)best_fit_node->next_of_size;
+        best_fit_node->next_of_size = best_fit_node->next_of_size->next_of_size;
+        if (best_fit_node->next_of_size != NULL) {
+            best_fit_node->next_of_size->prev_of_size =
+                (free_chunk *)best_fit_node;
+        }
+    }
+
+    // try split node
+    size_t leftover = CHUNK_SIZE(best_fit->status) - to_alloc - sizeof(chunk);
+    size_t rounded_down = CHUNK_SIZE_ALIGN * (leftover / CHUNK_SIZE_ALIGN);
+    if (rounded_down > MAX_ARENA_SIZE) {
+        best_fit->status &= ~(CHUNK_SIZE_ALIGN - 1);
+        size_t new_size = to_alloc + (leftover - rounded_down);
+        best_fit->status |= new_size;
+
+        free_chunk *split_chunk =
+            (free_chunk *)((uint64_t)((chunk *)best_fit)->data + new_size);
+        split_chunk->status = rounded_down | FREE;
+        split_chunk->prev_absolute = (chunk *)best_fit;
+        split_chunk->next_absolute = best_fit->next_absolute;
+        if (best_fit->next_absolute != NULL
+            && best_fit->next_absolute->status & FREE) {
+            free_chunk *next_absolute = (free_chunk *)best_fit->next_absolute;
+            next_absolute->prev_absolute = (chunk *)split_chunk;
+        }
+        a->free_chunk_tree =
+            rb_tree_insert(a->free_chunk_tree, (free_chunk_tree *)split_chunk);
+    }
+
+    best_fit->status = to_alloc & ~FREE;
+    a->stats.num_bytes_allocated += to_alloc;
+
+    return ((chunk *)best_fit)->data;
 }
 
 int main(void) {
