@@ -8,4 +8,6 @@ typedef struct stats {
     uint64_t total_heap_size;
 } stats;
 
+void initialize_stats(stats *s);
+
 #endif

@@ -6,14 +6,21 @@
 
 #include "stats.h"
 
+#define __ALLO_DEBUG_PRINT
+
 // Arenas are allocated for all sizes <= 1024 bytes.
 // sizes are powers of two when >= 124 bytes
-#define MAX_ARENA_SIZE (1 << 10)
+#define MAX_ARENA_POWER (10)
+#define MAX_ARENA_SIZE (1 << MAX_ARENA_POWER)
+#define ARENA_DOUBLING_POWER (7)
+#define ARENA_DOUBLING_SIZE (1 << ARENA_DOUBLING_POWER)
+#define NUM_ARENA_BUCKETS                                                      \
+    ((ARENA_DOUBLING_SIZE / 8) - (MIN_ALLOC_SIZE / 8)                          \
+     + (MAX_ARENA_POWER - ARENA_DOUBLING_POWER - 1))
 
 #define PAGE_SIZE 4096
 
-// How much arenas grow by
-#define ARENA_SIZE 4096
+#define ARENA_GROWTH_FACTOR 16
 
 // each heap
 #define HEAP_SIZE (PAGE_SIZE * 32)
@@ -29,7 +36,8 @@
 // 3 bits of flags
 #define ARENA_SIZE_ALIGN (1 << 3)
 
-#define ROUND_SIZE_TO_ALIGN(x) (((x) + CHUNK_SIZE_ALIGN - 1) & ~(CHUNK_SIZE_ALIGN - 1))
+#define ROUND_SIZE_TO_ALIGN(x)                                                 \
+    (((x) + CHUNK_SIZE_ALIGN - 1) & ~(CHUNK_SIZE_ALIGN - 1))
 
 #define CHUNK_SIZE(status) ((status) & ~(CHUNK_SIZE_ALIGN - 1))
 #define ARENA_CHUNK_SIZE(status) ((status) & ~7)
@@ -51,6 +59,7 @@ enum chunk_status {
     FREE = 2,
     RED = 4,
     TREE = 8,
+
     MMAPPED = 16,
 };
 
@@ -97,6 +106,11 @@ typedef struct arena_block {
     struct arena_free_chunk *free_list;
 } arena_block;
 
+typedef struct arena {
+    struct arena_block *arena_block_head;
+    struct arena_free_chunk *free_list;
+} arena;
+
 typedef struct heap {
     struct heap *prev;
     struct heap *next;
@@ -108,7 +122,16 @@ typedef struct allocator {
     stats stats;
     heap *heap_head;
     heap *heap_tail;
+    mmapped_chunk *mmapped_chunk_head;
     free_chunk_tree *free_chunk_tree;
+    arena arenas[NUM_ARENA_BUCKETS];
 } allocator;
+
+void initialize_allocator(allocator *a);
+void free_allocator(allocator *a);
+
+void *allo_cate(allocator *a, size_t size);
+
+void debug_printf(const char *fmt, ...);
 
 #endif

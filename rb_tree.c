@@ -177,3 +177,36 @@ free_chunk_tree *rb_tree_remove(free_chunk_tree *h, size_t size) {
     }
     return fix_up(h);
 }
+
+void print_free_chunk_list(free_chunk_list *list) {
+    debug_printf("[");
+    while (list != NULL) {
+        debug_printf("(%zu, %p)", CHUNK_SIZE(list->status), (void *)list);
+        list = list->next_of_size;
+        if (list != NULL) {
+            debug_printf(", ");
+        }
+    }
+    debug_printf("]");
+}
+
+void print_rb_tree_helper(free_chunk_tree *node, int level) {
+    if (node == NULL) {
+        return;
+    }
+
+    print_rb_tree_helper(node->right, level + 1);
+
+    for (int i = 0; i < level; ++i) {
+        debug_printf("  ");
+    }
+
+    debug_printf("%zu%s: ", CHUNK_SIZE(node->status),
+           is_red(node) ? "R" : "B");
+    print_free_chunk_list((free_chunk_list *)node);
+    debug_printf("\n");
+
+    print_rb_tree_helper(node->left, level + 1);
+}
+
+void rb_tree_debug_print(free_chunk_tree *root) { print_rb_tree_helper(root, 0); }
