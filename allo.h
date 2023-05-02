@@ -117,7 +117,7 @@ typedef struct heap {
     struct heap *prev;
     struct heap *next;
     uint64_t allocated_bytes;
-    free_chunk free_chunks[];
+    char free_chunks[];
 } heap;
 
 typedef struct allocator {
@@ -133,6 +133,7 @@ void free_allocator(allocator *a);
 
 void *allo_cate(allocator *a, size_t size);
 void allo_free(allocator *a, void *p);
+size_t introspect_size(allocator *a, void *p);
 
 void debug_printf(const char *fmt, ...);
 

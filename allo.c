@@ -226,7 +226,7 @@ void *allo_cate_standard(allocator *a, size_t to_alloc) {
 
     a->stats.num_bytes_allocated += CHUNK_SIZE(best_fit->status);
 
-    return ((chunk *)best_fit)->data;
+    return best_fit->data;
 }
 
 void *allo_cate(allocator *a, size_t size) {
@@ -315,4 +315,8 @@ void free_allocator(allocator *a) {
         chunk_next = c->next;
         munmap(c, CHUNK_SIZE(c->status));
     }
+}
+
+size_t introspect_size(allocator *a, void *p) {
+    return CHUNK_SIZE(((chunk *)((char *)p - sizeof(chunk)))->status);
 }

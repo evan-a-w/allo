@@ -9,14 +9,12 @@ void allocate_strings(size_t size, void (*free_fn)(allocator *, void *)) {
     char *strings[10];
     for (int i = 0; i < 10; i++) {
         char *x = allo_cate(&a, size);
-        heap_chunk *chunk = (heap_chunk *)(x - sizeof(heap_chunk));
-        printf("Got node of size: %zu\n", CHUNK_SIZE(chunk->status));
-        snprintf(x, size, "hello world %d", i);
+        snprintf(x, size, "%d hello world %d", i, i);
         strings[i] = x;
     }
 
     for (int i = 0; i < 10; i++) {
-        printf("%s\n", strings[i]);
+        printf("%s (size %lu)\n", strings[i], introspect_size(&a, strings[i]));
         free_fn(&a, strings[i]);
     }
 
