@@ -173,25 +173,14 @@ heap_chunk *prev_chunk(heap_chunk *c) {
 
 void *allo_cate_standard(allocator *a, size_t to_alloc) {
     debug_printf("allo_cate: standard %lu\n", to_alloc);
-    free_chunk_tree *best_fit_node =
-        rb_tree_search(a->free_chunk_tree, to_alloc);
+    free_chunk *best_fit = NULL;
+    a->free_chunk_tree =
+        rb_tree_remove(a->free_chunk_tree, to_alloc, &best_fit);
 
-    free_chunk *best_fit;
-    if (best_fit_node == NULL) {
+    if (best_fit == NULL) {
         best_fit = add_heap(a);
         if (best_fit == NULL)
             return NULL;
-    } else if (best_fit_node->next_of_size == NULL) {
-        best_fit = (free_chunk *)best_fit_node;
-        a->free_chunk_tree = rb_tree_remove(a->free_chunk_tree,
-                                            CHUNK_SIZE(best_fit_node->status));
-    } else {
-        best_fit = (free_chunk *)best_fit_node->next_of_size;
-        best_fit_node->next_of_size = best_fit_node->next_of_size->next_of_size;
-        if (best_fit_node->next_of_size != NULL) {
-            best_fit_node->next_of_size->prev_of_size =
-                (free_chunk *)best_fit_node;
-        }
     }
 
     best_fit->status &= ~FREE;

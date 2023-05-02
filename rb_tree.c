@@ -154,7 +154,7 @@ static free_chunk_tree *fix_up(free_chunk_tree *h) {
 }
 
 free_chunk_tree *rb_tree_remove(free_chunk_tree *h, size_t size,
-                                free_chunk_tree **removed_node) {
+                                free_chunk **removed_node) {
     if (h == NULL)
         return NULL;
 
@@ -162,7 +162,7 @@ free_chunk_tree *rb_tree_remove(free_chunk_tree *h, size_t size,
         if (!is_red(h->left) && !is_red(h->left->left)) {
             h = move_red_left(h);
         }
-        h->left = rb_tree_remove(h->left, size);
+        h->left = rb_tree_remove(h->left, size, removed_node);
     } else {
         if (is_red(h->left)) {
             h = rotate_right(h);
@@ -171,8 +171,9 @@ free_chunk_tree *rb_tree_remove(free_chunk_tree *h, size_t size,
             h = move_red_right(h);
         }
         if (size == CHUNK_SIZE(h->status)) {
+            h->status &= ~TREE;
             if (removed_node != NULL)
-                *removed_node = h;
+                *removed_node = (free_chunk *)h;
             if (h->next_of_size != NULL) {
                 free_chunk_list *next_of_size = h->next_of_size;
                 next_of_size->prev_of_size = NULL;
@@ -186,14 +187,14 @@ free_chunk_tree *rb_tree_remove(free_chunk_tree *h, size_t size,
                 }
                 next_of_size_tree->left = h->left;
                 next_of_size_tree->right = h->right;
-                h = next_of_size_tree;
+                return fix_up(next_of_size_tree);
             } else {
                 free_chunk_tree *min_node_right = min_node(h->right);
                 h->status = min_node_right->status;
                 h->right = delete_min(h->right);
             }
         } else {
-            h->right = rb_tree_remove(h->right, size);
+            h->right = rb_tree_remove(h->right, size, removed_node);
         }
     }
     return fix_up(h);

@@ -30,8 +30,8 @@ void noop(allocator *a, void *p) {
 }
 
 int main(void) {
-    allocate_strings(1032, allo_free);
-    /* allocate_strings(1032, noop); */
+    /* allocate_strings(1032, allo_free); */
+    allocate_strings(1032, noop);
 
     return 0;
 }
