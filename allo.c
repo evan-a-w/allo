@@ -36,18 +36,16 @@ void free_chunk_init(free_chunk *res, size_t size, size_t prev_size) {
 free_chunk *add_heap(allocator *a) {
     heap *h = mmap(NULL, HEAP_SIZE, PROT_READ | PROT_WRITE,
                    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (h == MAP_FAILED) {
+    if (h == MAP_FAILED)
         return NULL;
-    }
     h->next = a->heaps;
     h->prev = NULL;
-    if (a->heaps != NULL) {
+    if (a->heaps != NULL)
         a->heaps->prev = h;
-    }
     a->heaps = h;
     a->stats.total_heap_size += HEAP_SIZE;
 
-    free_chunk *res = h->free_chunks;
+    free_chunk *res = (free_chunk *)h->free_chunks;
 
     size_t chunk_size = HEAP_SIZE - sizeof(heap) - sizeof(heap_chunk);
     chunk_size &= ~(CHUNK_SIZE_ALIGN - 1);
@@ -173,14 +171,14 @@ heap_chunk *prev_chunk(heap_chunk *c) {
 
 void *allo_cate_standard(allocator *a, size_t to_alloc) {
     debug_printf("allo_cate: standard %lu\n", to_alloc);
-    free_chunk *best_fit = NULL;
-    a->free_chunk_tree =
-        rb_tree_remove(a->free_chunk_tree, to_alloc, &best_fit);
+    free_chunk *best_fit = rb_tree_search(a->free_chunk_tree, to_alloc);
 
     if (best_fit == NULL) {
         best_fit = add_heap(a);
         if (best_fit == NULL)
             return NULL;
+    } else {
+        a->free_chunk_tree = rb_tree_remove_node(a->free_chunk_tree, best_fit);
     }
 
     best_fit->status &= ~FREE;
@@ -308,6 +306,6 @@ void free_allocator(allocator *a) {
     }
 }
 
-size_t introspect_size(allocator *a, void *p) {
+size_t introspect_size(void *p) {
     return CHUNK_SIZE(((chunk *)((char *)p - sizeof(chunk)))->status);
 }

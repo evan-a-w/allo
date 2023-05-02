@@ -133,7 +133,7 @@ void free_allocator(allocator *a);
 
 void *allo_cate(allocator *a, size_t size);
 void allo_free(allocator *a, void *p);
-size_t introspect_size(allocator *a, void *p);
+size_t introspect_size(void *p);
 
 void debug_printf(const char *fmt, ...);
 
