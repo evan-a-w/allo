@@ -43,7 +43,7 @@ free_chunk_tree *rb_tree_search(free_chunk_tree *root, size_t size) {
         if (size == chunk_size) {
             return root;
         } else if (size < chunk_size) {
-            if (root->right == NULL)
+            if (root->left == NULL)
                 return root;
             root = root->left;
         } else {
@@ -55,7 +55,10 @@ free_chunk_tree *rb_tree_search(free_chunk_tree *root, size_t size) {
 
 free_chunk_tree *rb_tree_insert(free_chunk_tree *h, free_chunk_tree *new_node) {
     if (h == NULL) {
-        new_node-> status |= TREE;
+        new_node->status |= TREE;
+        new_node->left = NULL;
+        new_node->right = NULL;
+        new_node->next_of_size = NULL;
         return new_node;
     }
 
@@ -71,7 +74,7 @@ free_chunk_tree *rb_tree_insert(free_chunk_tree *h, free_chunk_tree *new_node) {
     } else if (new_chunk_size > chunk_size) {
         h->right = rb_tree_insert(h->right, new_node);
     } else {
-        free_chunk_list *new_list = (free_chunk_list *)h;
+        free_chunk_list *new_list = (free_chunk_list *)new_node;
         new_list->status &= ~TREE;
         new_list->next_of_size = h->next_of_size;
         if (h->next_of_size != NULL) {
@@ -201,12 +204,13 @@ void print_rb_tree_helper(free_chunk_tree *node, int level) {
         debug_printf("  ");
     }
 
-    debug_printf("%zu%s: ", CHUNK_SIZE(node->status),
-           is_red(node) ? "R" : "B");
+    debug_printf("%zu%s: ", CHUNK_SIZE(node->status), is_red(node) ? "R" : "B");
     print_free_chunk_list((free_chunk_list *)node);
     debug_printf("\n");
 
     print_rb_tree_helper(node->left, level + 1);
 }
 
-void rb_tree_debug_print(free_chunk_tree *root) { print_rb_tree_helper(root, 0); }
+void rb_tree_debug_print(free_chunk_tree *root) {
+    print_rb_tree_helper(root, 0);
+}

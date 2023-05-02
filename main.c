@@ -4,12 +4,12 @@
 
 allocator a;
 
-void allocate_large_strings(void) {
+void allocate_strings(size_t size) {
     initialize_allocator(&a);
     char *strings[10];
     for (int i = 0; i < 10; i++) {
-        char *x = allo_cate(&a, 5000);
-        snprintf(x, 100, "hello world %d", i);
+        char *x = allo_cate(&a, size);
+        snprintf(x, size, "hello world %d", i);
         strings[i] = x;
     }
 
@@ -23,7 +23,7 @@ void allocate_large_strings(void) {
 }
 
 int main(void) {
-    allocate_large_strings();
+    allocate_strings(65500);
 
     return 0;
 }

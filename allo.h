@@ -15,8 +15,8 @@
 #define ARENA_DOUBLING_POWER (7)
 #define ARENA_DOUBLING_SIZE (1 << ARENA_DOUBLING_POWER)
 #define NUM_ARENA_BUCKETS                                                      \
-    ((ARENA_DOUBLING_SIZE / 8) - (MIN_ALLOC_SIZE / 8)                          \
-     + (MAX_ARENA_POWER - ARENA_DOUBLING_POWER - 1))
+    ((ARENA_DOUBLING_SIZE / 8) - (MIN_ALLOC_SIZE / 8 - 1)                      \
+     + (MAX_ARENA_POWER - ARENA_DOUBLING_POWER))
 
 #define PAGE_SIZE 4096
 
@@ -29,7 +29,10 @@
 #define MIN_ALLOC_SIZE (sizeof(struct arena_free_chunk))
 
 // directly mmap requests >= this size
-#define MIN_MMAP (HEAP_SIZE - sizeof(struct heap) - PAGE_SIZE)
+// size at which you can't store two of the same thing on a heap
+// (x + sizeof(chunk)) * 2 > HEAP_SIZE
+// x > HEAP_SIZE / 2 - sizeof(chunk)
+#define MIN_MMAP ((HEAP_SIZE - sizeof(struct heap)) / 2 - sizeof(struct chunk))
 
 // 5 bits of flags
 #define CHUNK_SIZE_ALIGN (1 << 5)
@@ -40,7 +43,7 @@
     (((x) + CHUNK_SIZE_ALIGN - 1) & ~(CHUNK_SIZE_ALIGN - 1))
 
 #define CHUNK_SIZE(status) ((status) & ~(CHUNK_SIZE_ALIGN - 1))
-#define ARENA_CHUNK_SIZE(status) ((status) & ~7)
+#define ARENA_CHUNK_SIZE(status) ((status) & ~(ARENA_SIZE_ALIGN - 1))
 
 typedef struct chunk {
     size_t status;
@@ -94,16 +97,15 @@ typedef struct free_chunk_list {
 } free_chunk_list;
 
 typedef struct arena_free_chunk {
-    size_t size;
+    size_t status;
     struct arena_free_chunk *next;
 } arena_free_chunk;
 
 // malloc larger blocks to subdivide for the arenas
 typedef struct arena_block {
-    uint64_t status;
     struct arena_block *prev;
     struct arena_block *next;
-    struct arena_free_chunk *free_list;
+    char data[];
 } arena_block;
 
 typedef struct arena {
@@ -120,8 +122,7 @@ typedef struct heap {
 
 typedef struct allocator {
     stats stats;
-    heap *heap_head;
-    heap *heap_tail;
+    heap *heaps;
     mmapped_chunk *mmapped_chunk_head;
     free_chunk_tree *free_chunk_tree;
     arena arenas[NUM_ARENA_BUCKETS];
