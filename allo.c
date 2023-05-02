@@ -22,6 +22,17 @@ void debug_printf(const char *fmt, ...) {
 #endif
 }
 
+void free_chunk_init(free_chunk *res, size_t size, size_t prev_size) {
+    *(free_chunk_tree *)res = (free_chunk_tree){
+        .prev_size = prev_size,
+        .status = size | FREE,
+        // set these to null even though its not a tree
+        .next_of_size = NULL,
+        .left = NULL,
+        .right = NULL,
+    };
+}
+
 free_chunk *add_heap(allocator *a) {
     heap *h = mmap(NULL, HEAP_SIZE, PROT_READ | PROT_WRITE,
                    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -41,22 +52,14 @@ free_chunk *add_heap(allocator *a) {
     size_t chunk_size = HEAP_SIZE - sizeof(heap) - sizeof(heap_chunk);
     chunk_size &= ~(CHUNK_SIZE_ALIGN - 1);
 
-    *(free_chunk_tree *)res = (free_chunk_tree){
-        .prev_size = 0,
-        .status = chunk_size | FREE,
-        // set these to null even though its not a tree
-        .next_of_size = NULL,
-        .left = NULL,
-        .right = NULL,
-    };
+    free_chunk_init(res, chunk_size, 0);
 
     debug_printf("add_heap: %p\n", res);
 
     return res;
 }
 
-void coalesce(allocator *a, heap_chunk *before, free_chunk *after) {
-}
+void coalesce(allocator *a, heap_chunk *before, free_chunk *after) {}
 
 uint64_t round_to_alloc_size_without_metadata(size_t n) {
     if (n >= MIN_MMAP)
@@ -193,7 +196,7 @@ void *allo_cate_standard(allocator *a, size_t to_alloc) {
 
     // try split node
     if (CHUNK_SIZE(best_fit->status) - to_alloc >= sizeof(heap_chunk)) {
-        size_t leftover = CHUNK_SIZE(best_fit->status) - to_alloc - sizeof(heap_chunk);
+        size_t leftover = CHUNK_SIZE(best_fit->status) - to_alloc;
         size_t rounded_down = leftover & ~(CHUNK_SIZE_ALIGN - 1);
 
         if (rounded_down > MAX_ARENA_SIZE) {
@@ -201,28 +204,27 @@ void *allo_cate_standard(allocator *a, size_t to_alloc) {
             // should be aligned already but just in case
             new_size &= ~(CHUNK_SIZE_ALIGN - 1);
 
-            best_fit->status = new_size;
+            debug_printf("Split node of size %lu into %lu and %lu\n",
+                         CHUNK_SIZE(best_fit->status), new_size, rounded_down);
 
-            free_chunk *split_chunk =
-                (free_chunk *)((uint64_t)((chunk *)best_fit)->data + new_size);
-            split_chunk->status = rounded_down | FREE;
-            split_chunk->prev_size = new_size;
+            free_chunk *split_chunk = (free_chunk *)(best_fit->data + new_size);
+            free_chunk_init(split_chunk, rounded_down, new_size);
 
             heap_chunk *next_absolute = next_chunk(best_fit);
             if (next_absolute != NULL && next_absolute->status & FREE) {
                 coalesce(a, (heap_chunk *)split_chunk, next_absolute);
-            } else if (next_absolute != NULL) {
-                next_absolute->prev_size = rounded_down;
+            } else {
+                if (next_absolute != NULL)
+                    next_absolute->prev_size = rounded_down;
                 a->free_chunk_tree = rb_tree_insert(
                     a->free_chunk_tree, (free_chunk_tree *)split_chunk);
             }
 
-            debug_printf("Split node of size %lu into %lu and %lu\n",
-                         CHUNK_SIZE(best_fit->status), new_size, rounded_down);
+            best_fit->status = new_size;
         }
     }
 
-    a->stats.num_bytes_allocated += to_alloc;
+    a->stats.num_bytes_allocated += CHUNK_SIZE(best_fit->status);
 
     return ((chunk *)best_fit)->data;
 }

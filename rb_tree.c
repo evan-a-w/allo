@@ -144,7 +144,8 @@ static free_chunk_tree *fix_up(free_chunk_tree *h) {
     }
 
     if (is_red(h->left) && is_red(h->left->left)) {
-        h = rotate_right(h);}
+        h = rotate_right(h);
+    }
     if (is_red(h->left) && is_red(h->right)) {
         flip_colors(h);
     }
