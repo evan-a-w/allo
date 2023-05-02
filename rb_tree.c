@@ -153,7 +153,8 @@ static free_chunk_tree *fix_up(free_chunk_tree *h) {
     return h;
 }
 
-free_chunk_tree *rb_tree_remove(free_chunk_tree *h, size_t size) {
+free_chunk_tree *rb_tree_remove(free_chunk_tree *h, size_t size,
+                                free_chunk_tree **removed_node) {
     if (h == NULL)
         return NULL;
 
@@ -166,16 +167,31 @@ free_chunk_tree *rb_tree_remove(free_chunk_tree *h, size_t size) {
         if (is_red(h->left)) {
             h = rotate_right(h);
         }
-        if (size == CHUNK_SIZE(h->status) && (h->right == NULL)) {
-            return NULL;
-        }
         if (!is_red(h->right) && !is_red(h->right->left)) {
             h = move_red_right(h);
         }
         if (size == CHUNK_SIZE(h->status)) {
-            free_chunk_tree *min_node_right = min_node(h->right);
-            h->status = min_node_right->status;
-            h->right = delete_min(h->right);
+            if (removed_node != NULL)
+                *removed_node = h;
+            if (h->next_of_size != NULL) {
+                free_chunk_list *next_of_size = h->next_of_size;
+                next_of_size->prev_of_size = NULL;
+                free_chunk_tree *next_of_size_tree =
+                    (free_chunk_tree *)next_of_size;
+                next_of_size_tree->status |= TREE;
+                if (IS_RED(h->status)) {
+                    next_of_size_tree->status |= RED;
+                } else {
+                    next_of_size_tree->status &= ~RED;
+                }
+                next_of_size_tree->left = h->left;
+                next_of_size_tree->right = h->right;
+                h = next_of_size_tree;
+            } else {
+                free_chunk_tree *min_node_right = min_node(h->right);
+                h->status = min_node_right->status;
+                h->right = delete_min(h->right);
+            }
         } else {
             h->right = rb_tree_remove(h->right, size);
         }
@@ -215,4 +231,21 @@ void print_rb_tree_helper(free_chunk_tree *node, int level) {
 
 void rb_tree_debug_print(free_chunk_tree *root) {
     print_rb_tree_helper(root, 0);
+}
+
+free_chunk_tree *rb_tree_remove_node(free_chunk_tree *h, free_chunk *node) {
+    if (IS_TREE(node->status)) {
+        return rb_tree_remove(h, CHUNK_SIZE(node->status), NULL);
+    }
+    // otherwise remove from list
+    free_chunk_list *list = (free_chunk_list *)node;
+    if (list->prev_of_size != NULL) {
+        ((free_chunk_list *)list->prev_of_size)->next_of_size =
+            list->next_of_size;
+    }
+    if (list->next_of_size != NULL) {
+        ((free_chunk_list *)list->next_of_size)->prev_of_size =
+            list->prev_of_size;
+    }
+    return h;
 }

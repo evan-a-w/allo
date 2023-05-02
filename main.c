@@ -14,7 +14,7 @@ void allocate_strings(size_t size, void (*free_fn)(allocator *, void *)) {
     }
 
     for (int i = 0; i < 10; i++) {
-        printf("%s (size %lu)\n", strings[i], introspect_size(&a, strings[i]));
+        printf("%s\n", strings[i]);
         free_fn(&a, strings[i]);
     }
 
@@ -30,8 +30,8 @@ void noop(allocator *a, void *p) {
 }
 
 int main(void) {
-    /* allocate_strings(1032, allo_free); */
-    allocate_strings(1032, noop);
+    allocate_strings(1032, allo_free);
+    /* allocate_strings(1032, noop); */
 
     return 0;
 }

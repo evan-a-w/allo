@@ -194,6 +194,8 @@ void *allo_cate_standard(allocator *a, size_t to_alloc) {
         }
     }
 
+    best_fit->status &= ~FREE;
+
     // try split node
     if (CHUNK_SIZE(best_fit->status) - to_alloc >= sizeof(heap_chunk)) {
         size_t leftover = CHUNK_SIZE(best_fit->status) - to_alloc;
