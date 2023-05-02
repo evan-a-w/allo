@@ -57,6 +57,14 @@ typedef struct mmapped_chunk {
     char data[];
 } mmapped_chunk;
 
+typedef struct heap_chunk {
+    size_t prev_size; // 0 if no prev
+    size_t status;
+    char data[];
+} heap_chunk;
+
+typedef heap_chunk free_chunk;
+
 enum chunk_status {
     ARENA = 1,
     FREE = 2,
@@ -72,28 +80,20 @@ enum chunk_status {
 #define IS_FREE(status) ((status)&FREE)
 #define IS_MMAPPED(status) ((status)&MMAPPED)
 
-typedef struct free_chunk {
-    size_t status;
-    struct chunk *prev_absolute;
-    struct chunk *next_absolute;
-} free_chunk;
-
 // sorted in an rb tree
 typedef struct free_chunk_tree {
+    size_t prev_size;
     size_t status;
-    struct chunk *prev_absolute;
-    struct chunk *next_absolute;
     struct free_chunk_list *next_of_size;
     struct free_chunk_tree *left;
     struct free_chunk_tree *right;
 } free_chunk_tree;
 
 typedef struct free_chunk_list {
+    size_t prev_size;
     size_t status;
-    struct chunk *prev_absolute;
-    struct chunk *next_absolute;
     struct free_chunk_list *next_of_size;
-    struct free_chunk *prev_of_size;
+    free_chunk *prev_of_size;
 } free_chunk_list;
 
 typedef struct arena_free_chunk {
@@ -132,6 +132,7 @@ void initialize_allocator(allocator *a);
 void free_allocator(allocator *a);
 
 void *allo_cate(allocator *a, size_t size);
+void allo_free(allocator *a, void *p);
 
 void debug_printf(const char *fmt, ...);
 

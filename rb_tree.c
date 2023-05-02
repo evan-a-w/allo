@@ -144,9 +144,7 @@ static free_chunk_tree *fix_up(free_chunk_tree *h) {
     }
 
     if (is_red(h->left) && is_red(h->left->left)) {
-        h = rotate_right(h);
-    }
-
+        h = rotate_right(h);}
     if (is_red(h->left) && is_red(h->right)) {
         flip_colors(h);
     }
@@ -155,6 +153,9 @@ static free_chunk_tree *fix_up(free_chunk_tree *h) {
 }
 
 free_chunk_tree *rb_tree_remove(free_chunk_tree *h, size_t size) {
+    if (h == NULL)
+        return NULL;
+
     if (size < CHUNK_SIZE(h->status)) {
         if (!is_red(h->left) && !is_red(h->left->left)) {
             h = move_red_left(h);
