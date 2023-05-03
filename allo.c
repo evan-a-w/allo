@@ -106,6 +106,7 @@ uint64_t get_arena_bucket(uint64_t status) {
         return (size - MIN_ALLOC_SIZE) / ARENA_SIZE_ALIGN;
 
     uint64_t pow_two = sizeof(uint64_t) + __builtin_clzll(size - 1);
+    printf("pow_two for %lu: %lu\n", size, pow_two);
     return MAX_ARENA_POWER - pow_two
            + (ARENA_DOUBLING_SIZE - MIN_ALLOC_SIZE) / ARENA_SIZE_ALIGN + 1;
 }
