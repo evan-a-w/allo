@@ -105,8 +105,9 @@ uint64_t get_arena_bucket(uint64_t status) {
     if (size <= ARENA_DOUBLING_SIZE)
         return (size - MIN_ALLOC_SIZE) / ARENA_SIZE_ALIGN;
 
-    return NUM_ARENA_BUCKETS - (MAX_ARENA_POWER - ARENA_DOUBLING_POWER) + 64
-           - __builtin_clzll(size - 1) - ARENA_DOUBLING_POWER;
+    uint64_t pow_two = sizeof(uint64_t) + __builtin_clzll(size - 1);
+    return MAX_ARENA_POWER - pow_two
+           + (ARENA_DOUBLING_SIZE - MIN_ALLOC_SIZE) / ARENA_SIZE_ALIGN + 1;
 }
 
 size_t arena_block_size(size_t size) {
@@ -118,23 +119,28 @@ size_t arena_block_size(size_t size) {
 }
 
 void *allo_cate_arena(allocator *a, size_t to_alloc) {
+    void *res;
+
     // changes other thing in tree between
     arena *arena = &a->arenas[get_arena_bucket(to_alloc)];
     debug_printf("allo_cate_arena: %lu %lu\n", to_alloc,
                  get_arena_bucket(to_alloc));
 
+try_take_from_free_list:
     if (arena->free_list) {
         arena_free_chunk *c = arena->free_list;
         arena->free_list = c->next;
         chunk *ch = (chunk *)c;
         ch->status = to_alloc;
-        return ch->data;
+        res = ch->data;
+        goto end;
     }
 
     size_t arena_size = arena_block_size(to_alloc);
     arena_block *block = allo_cate(a, arena_size);
     if (block == NULL) {
-        return NULL;
+        res = NULL;
+        goto end;
     }
 
     char *end_of_block = (char *)block + arena_size;
@@ -146,10 +152,12 @@ void *allo_cate_arena(allocator *a, size_t to_alloc) {
         arena->free_list = c;
     }
 
+    goto try_take_from_free_list;
+end:
     rb_tree_debug_print(a->free_chunk_tree);
     debug_printf("END allo_cate_arena: %lu %lu\n", to_alloc,
                  get_arena_bucket(to_alloc));
-    return allo_cate_arena(a, to_alloc);
+    return res;
 }
 
 heap *round_to_heap(void *p) {

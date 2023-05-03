@@ -1,56 +1,55 @@
+#include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
 
 #include "allo.h"
-#include "rb_tree.h"
 
-allocator a;
+#define NUM_ALLOCATIONS 1000
+#define MAX_ALLOC_SIZE 512
 
-void allocate_strings(size_t size, void (*free_fn)(allocator *, void *)) {
-    initialize_allocator(&a);
-    char *strings[10];
-    for (int i = 0; i < 10; i++) {
-        char *x = allo_cate(&a, size);
-        snprintf(x, size, "%d hello world %d", i, i);
-        strings[i] = x;
+void test(void) {
+    srand(time(NULL));
+
+    int *allocated_memory[NUM_ALLOCATIONS] = {NULL};
+    int sz[NUM_ALLOCATIONS] = {0};
+
+    for (int i = 0; i < NUM_ALLOCATIONS; i++) {
+        sz[i] = (rand() % MAX_ALLOC_SIZE + 1);
+
+        allocated_memory[i] = malloc(sz[i] * 4);
+        assert(allocated_memory[i] != NULL);
+        for (int j = 0; j < sz[i]; j++)
+            allocated_memory[i][j] = i;
     }
 
-    for (int i = 0; i < 10; i++) {
-        printf("%s\n", strings[i]);
-        free_fn(&a, strings[i]);
+    // Free the allocated memory in a random order
+    for (int i = 0; i < NUM_ALLOCATIONS; i++) {
+        int index_to_free = rand() % NUM_ALLOCATIONS;
+        if (allocated_memory[index_to_free] == NULL)
+            continue;
+        for (int j = 0; j < sz[index_to_free]; j++)
+            assert(allocated_memory[index_to_free][j] == index_to_free);
+        free(allocated_memory[index_to_free]);
+        allocated_memory[index_to_free] = NULL;
     }
 
-    rb_tree_debug_print(a.free_chunk_tree);
-
-    free_allocator(&a);
-}
-
-void allocate_strings_free(size_t size) {
-    initialize_allocator(&a);
-
-    for (int i = 0; i < 10; i++) {
-        char *x = allo_cate(&a, size);
-        snprintf(x, size, "%d hello world %d", i, i);
-        rb_tree_debug_print(a.free_chunk_tree);
-        printf("%s\n", x);
-        rb_tree_debug_print(a.free_chunk_tree);
-        allo_free(&a, x);
+    for (int i = 0; i < NUM_ALLOCATIONS; i++) {
+        if (allocated_memory[i] == NULL)
+            continue;
+        for (int j = 0; j < sz[i]; j++)
+            assert(allocated_memory[i][j] == i);
+        free(allocated_memory[i]);
+        allocated_memory[i] = NULL;
     }
 
-    rb_tree_debug_print(a.free_chunk_tree);
-
-    free_allocator(&a);
-}
-
-void noop(allocator *a, void *p) {
-    (void)a;
-    (void)p;
-    return;
+    printf("Test passed: All memory allocations, data integrity checks, and "
+           "frees were successful.\n");
 }
 
 int main(void) {
-    /* allocate_strings(1032, allo_free); */
-    /* allocate_strings(1032, noop); */
-    allocate_strings_free(1032);
+    test();
 
     return 0;
 }

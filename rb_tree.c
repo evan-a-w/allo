@@ -113,6 +113,7 @@ free_chunk_tree *rb_tree_insert(free_chunk_tree *h, free_chunk_tree *new_node) {
     size_t new_chunk_size = CHUNK_SIZE(new_node->status);
 
     if (new_chunk_size == chunk_size) {
+        new_node->right = NULL;
         free_chunk_list *new_list = (free_chunk_list *)new_node;
         new_list->next_of_size = h->next_of_size;
         new_list->prev_of_size = (free_chunk *)h;
