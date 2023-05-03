@@ -27,22 +27,24 @@ void debug_printf(const char *fmt, ...) {
 void free_chunk_init(free_chunk *res, size_t size, size_t prev_size) {
     *(free_chunk_tree *)res = (free_chunk_tree){
         .prev_size = prev_size,
-        .status    = size | FREE,
+        .status = size | FREE,
         // set these to null even though its not a tree because we forget to do
         // this elsewhere <3
         .next_of_size = NULL,
-        .left         = NULL,
-        .right        = NULL,
+        .left = NULL,
+        .right = NULL,
     };
 }
 
 free_chunk *add_heap(allocator *a) {
     heap *h = mmap(NULL, HEAP_SIZE, PROT_READ | PROT_WRITE,
                    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (h == MAP_FAILED) return NULL;
+    if (h == MAP_FAILED)
+        return NULL;
     h->next = a->heaps;
     h->prev = NULL;
-    if (a->heaps != NULL) a->heaps->prev = h;
+    if (a->heaps != NULL)
+        a->heaps->prev = h;
     a->heaps = h;
     a->stats.total_heap_size += HEAP_SIZE;
 
@@ -59,8 +61,10 @@ free_chunk *add_heap(allocator *a) {
 }
 
 uint64_t round_to_alloc_size_without_metadata(size_t n) {
-    if (n >= MIN_MMAP) return n;
-    if (n < MIN_ALLOC_SIZE) return MIN_ALLOC_SIZE;
+    if (n >= MIN_MMAP)
+        return n;
+    if (n < MIN_ALLOC_SIZE)
+        return MIN_ALLOC_SIZE;
 
     // smallest x such that 16 + 8x >= n
     // ceil((n - 16) / 8)
@@ -81,13 +85,13 @@ uint64_t round_to_alloc_size_without_metadata(size_t n) {
 
 void *allo_cate_mmaped(allocator *a, size_t size) {
     debug_printf("allo_cate_mmaped: %lu\n", size);
-    size_t         to_alloc = size + sizeof(struct mmapped_chunk);
-    mmapped_chunk *c        = mmap(NULL, to_alloc, PROT_READ | PROT_WRITE,
-                                   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    size_t to_alloc = size + sizeof(struct mmapped_chunk);
+    mmapped_chunk *c = mmap(NULL, to_alloc, PROT_READ | PROT_WRITE,
+                            MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     // need accurate allocation size because munmap requires size
     c->status = to_alloc | MMAPPED;
-    c->prev   = NULL;
-    c->next   = a->mmapped_chunk_head;
+    c->prev = NULL;
+    c->next = a->mmapped_chunk_head;
     if (a->mmapped_chunk_head != NULL) {
         a->mmapped_chunk_head->prev = c;
     }
@@ -100,8 +104,8 @@ uint64_t get_arena_bucket(uint64_t status) {
     if (size <= ARENA_DOUBLING_SIZE)
         return (size - MIN_ALLOC_SIZE) / ARENA_SIZE_ALIGN;
 
-    return NUM_ARENA_BUCKETS - (MAX_ARENA_POWER - ARENA_DOUBLING_POWER) + 64 -
-           __builtin_clzll(size - 1) - ARENA_DOUBLING_POWER;
+    return NUM_ARENA_BUCKETS - (MAX_ARENA_POWER - ARENA_DOUBLING_POWER) + 64
+           - __builtin_clzll(size - 1) - ARENA_DOUBLING_POWER;
 }
 
 size_t arena_block_size(size_t size) {
@@ -119,14 +123,14 @@ void *allo_cate_arena(allocator *a, size_t to_alloc) {
 
     if (arena->free_list) {
         arena_free_chunk *c = arena->free_list;
-        arena->free_list    = c->next;
-        chunk *ch           = (chunk *)c;
-        ch->status          = to_alloc | ARENA;
+        arena->free_list = c->next;
+        chunk *ch = (chunk *)c;
+        ch->status = to_alloc;
         return ch->data;
     }
 
-    size_t       arena_size = arena_block_size(to_alloc);
-    arena_block *block      = allo_cate(a, arena_size);
+    size_t arena_size = arena_block_size(to_alloc);
+    arena_block *block = allo_cate(a, arena_size);
     if (block == NULL) {
         return NULL;
     }
@@ -134,10 +138,10 @@ void *allo_cate_arena(allocator *a, size_t to_alloc) {
     char *end_of_block = (char *)block + arena_size;
     for (arena_free_chunk *c = (arena_free_chunk *)block->data;
          (char *)c < end_of_block;
-         c = (arena_free_chunk *)((char *)c + sizeof(arena_free_chunk) +
-                                  to_alloc)) {
-        c->status        = to_alloc | ARENA | FREE;
-        c->next          = arena->free_list;
+         c = (arena_free_chunk *)((char *)c + sizeof(arena_free_chunk)
+                                  + to_alloc)) {
+        c->status = to_alloc | FREE;
+        c->next = arena->free_list;
         arena->free_list = c;
     }
 
@@ -161,7 +165,8 @@ heap_chunk *next_chunk(heap_chunk *c) {
 }
 
 heap_chunk *prev_chunk(heap_chunk *c) {
-    if (c->prev_size == 0) return NULL;
+    if (c->prev_size == 0)
+        return NULL;
     return (heap_chunk *)((char *)c - c->prev_size);
 }
 
@@ -193,7 +198,8 @@ void *allo_cate_standard(allocator *a, size_t to_alloc) {
 
     if (best_fit == NULL) {
         best_fit = add_heap(a);
-        if (best_fit == NULL) return NULL;
+        if (best_fit == NULL)
+            return NULL;
     } else {
         a->free_chunk_tree = rb_tree_remove_node(a->free_chunk_tree, best_fit);
     }
@@ -202,7 +208,7 @@ void *allo_cate_standard(allocator *a, size_t to_alloc) {
 
     // try split node
     if (CHUNK_SIZE(best_fit->status) - to_alloc >= sizeof(heap_chunk)) {
-        size_t leftover     = CHUNK_SIZE(best_fit->status) - to_alloc;
+        size_t leftover = CHUNK_SIZE(best_fit->status) - to_alloc;
         size_t rounded_down = leftover & ~(CHUNK_SIZE_ALIGN - 1);
 
         if (rounded_down > MAX_ARENA_SIZE) {
@@ -245,8 +251,8 @@ void allo_free_arena(allocator *a, chunk *ch) {
     arena *arena = &a->arenas[get_arena_bucket(CHUNK_SIZE(ch->status))];
     ch->status |= FREE;
     arena_free_chunk *c = (arena_free_chunk *)ch;
-    c->next             = arena->free_list;
-    arena->free_list    = c;
+    c->next = arena->free_list;
+    arena->free_list = c;
 }
 void allo_free_mmaped(allocator *a, chunk *ch) {
     debug_printf("allo_free_mmaped: %lu\n", CHUNK_SIZE(ch->status));
@@ -279,7 +285,7 @@ void allo_free(allocator *a, void *p) {
     }
     chunk *c = (chunk *)((char *)p - sizeof(chunk));
 
-    if (c->status & ARENA) {
+    if (CHUNK_SIZE(c->status) <= MAX_ARENA_SIZE) {
         allo_free_arena(a, c);
         return;
     } else if (c->status & MMAPPED) {
@@ -291,13 +297,13 @@ void allo_free(allocator *a, void *p) {
 }
 
 void initialize_allocator(allocator *a) {
-    a->heaps              = NULL;
-    a->free_chunk_tree    = NULL;
+    a->heaps = NULL;
+    a->free_chunk_tree = NULL;
     a->mmapped_chunk_head = NULL;
     initialize_stats(&a->stats);
     for (size_t i = 0; i < NUM_ARENA_BUCKETS; i++) {
         a->arenas[i].arena_block_head = NULL;
-        a->arenas[i].free_list        = NULL;
+        a->arenas[i].free_list = NULL;
     }
 }
 
