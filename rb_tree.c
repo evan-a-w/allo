@@ -167,7 +167,13 @@ void print_rb_tree_helper(free_chunk_tree *node, int level) {
 }
 
 void rb_tree_debug_print(free_chunk_tree *root) {
+#ifdef ALLO_RB_DEBUG
+    debug_printf("RB Tree:\n");
     print_rb_tree_helper(root, 0);
+    debug_printf("END RB Tree:\n");
+#else
+    (void)root;
+#endif
 }
 
 static free_chunk_tree *delete_min(free_chunk_tree *h) {

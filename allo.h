@@ -6,7 +6,8 @@
 
 #include "stats.h"
 
-/* #define __ALLO_DEBUG_PRINT */
+#define __ALLO_DEBUG_PRINT
+#define ALLO_OVERRIDE_MALLOC
 
 // Arenas are allocated for all sizes <= 1024 bytes.
 // sizes are powers of two when >= 124 bytes
@@ -98,6 +99,7 @@ typedef struct free_chunk_list {
 typedef struct arena_free_chunk {
     size_t status;
     struct arena_free_chunk *next;
+    char data[];
 } arena_free_chunk;
 
 // malloc larger blocks to subdivide for the arenas
@@ -135,5 +137,20 @@ void allo_free(allocator *a, void *p);
 size_t introspect_size(void *p);
 
 void debug_printf(const char *fmt, ...);
+
+// malloc etc.
+extern allocator global_allocator;
+
+void *_allo_malloc(size_t size);
+void _allo_free(void *p);
+void *_allo_calloc(size_t nmemb, size_t size);
+void *_allo_realloc(void *ptr, size_t size);
+
+#ifdef ALLO_OVERRIDE_MALLOC
+#define malloc(x) _allo_malloc(x)
+#define free(x) _allo_free(x)
+#define calloc(x, y) _allo_calloc(x, y)
+#define realloc(x, y) _allo_realloc(x, y)
+#endif
 
 #endif

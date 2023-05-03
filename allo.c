@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/mman.h>
 
 #include "rb_tree.h"
@@ -117,6 +118,7 @@ size_t arena_block_size(size_t size) {
 }
 
 void *allo_cate_arena(allocator *a, size_t to_alloc) {
+    // changes other thing in tree between
     arena *arena = &a->arenas[get_arena_bucket(to_alloc)];
     debug_printf("allo_cate_arena: %lu %lu\n", to_alloc,
                  get_arena_bucket(to_alloc));
@@ -138,13 +140,15 @@ void *allo_cate_arena(allocator *a, size_t to_alloc) {
     char *end_of_block = (char *)block + arena_size;
     for (arena_free_chunk *c = (arena_free_chunk *)block->data;
          (char *)c < end_of_block;
-         c = (arena_free_chunk *)((char *)c + sizeof(arena_free_chunk)
-                                  + to_alloc)) {
+         c = (arena_free_chunk *)(c->data + to_alloc)) {
         c->status = to_alloc | FREE;
         c->next = arena->free_list;
         arena->free_list = c;
     }
 
+    rb_tree_debug_print(a->free_chunk_tree);
+    debug_printf("END allo_cate_arena: %lu %lu\n", to_alloc,
+                 get_arena_bucket(to_alloc));
     return allo_cate_arena(a, to_alloc);
 }
 
@@ -158,10 +162,7 @@ bool same_heap(void *p1, void *p2) {
 
 heap_chunk *next_chunk(heap_chunk *c) {
     heap_chunk *next = (heap_chunk *)(c->data + CHUNK_SIZE(c->status));
-    if (same_heap(c, next)) {
-        return next;
-    }
-    return NULL;
+    return same_heap(c, next) ? next : NULL;
 }
 
 heap_chunk *prev_chunk(heap_chunk *c) {
@@ -171,7 +172,7 @@ heap_chunk *prev_chunk(heap_chunk *c) {
 }
 
 void coalesce(allocator *a, heap_chunk *chunk) {
-    debug_printf("coalesce: %p\n", chunk);
+    debug_printf("coalesce: %p (size %lu)\n", chunk, CHUNK_SIZE(chunk->status));
     heap_chunk *prev = prev_chunk(chunk);
     if (prev && prev->status & FREE) {
         a->free_chunk_tree = rb_tree_remove_node(a->free_chunk_tree, prev);
@@ -190,6 +191,10 @@ void coalesce(allocator *a, heap_chunk *chunk) {
 
     a->free_chunk_tree =
         rb_tree_insert(a->free_chunk_tree, (free_chunk_tree *)chunk);
+    rb_tree_debug_print(a->free_chunk_tree);
+
+    debug_printf("END coalesce: %p (size %lu)\n", chunk,
+                 CHUNK_SIZE(chunk->status));
 }
 
 void *allo_cate_standard(allocator *a, size_t to_alloc) {
@@ -234,19 +239,29 @@ void *allo_cate_standard(allocator *a, size_t to_alloc) {
 }
 
 void *allo_cate(allocator *a, size_t size) {
+    debug_printf("allo_cate: %lu\n", size);
     rb_tree_debug_print(a->free_chunk_tree);
+
+    void *res = NULL;
 
     size_t to_alloc = round_to_alloc_size_without_metadata(size);
     if (to_alloc <= MAX_ARENA_SIZE) {
-        return allo_cate_arena(a, to_alloc);
+        res = allo_cate_arena(a, to_alloc);
     } else if (to_alloc >= MIN_MMAP) {
-        return allo_cate_mmaped(a, to_alloc);
+        res = allo_cate_mmaped(a, to_alloc);
+    } else {
+        res = allo_cate_standard(a, to_alloc);
     }
 
-    return allo_cate_standard(a, to_alloc);
+    debug_printf("allo_cate result: %p\n", res);
+    rb_tree_debug_print(a->free_chunk_tree);
+
+    return res;
 }
 
 void allo_free_arena(allocator *a, chunk *ch) {
+    if (ch == NULL)
+        return;
     debug_printf("allo_free_arena: %lu\n", CHUNK_SIZE(ch->status));
     arena *arena = &a->arenas[get_arena_bucket(CHUNK_SIZE(ch->status))];
     ch->status |= FREE;
@@ -285,7 +300,7 @@ void allo_free(allocator *a, void *p) {
     }
     chunk *c = (chunk *)((char *)p - sizeof(chunk));
 
-    if (CHUNK_SIZE(c->status) <= MAX_ARENA_SIZE) {
+    if (ARENA_CHUNK_SIZE(c->status) <= MAX_ARENA_SIZE) {
         allo_free_arena(a, c);
         return;
     } else if (c->status & MMAPPED) {
@@ -322,4 +337,34 @@ void free_allocator(allocator *a) {
 
 size_t introspect_size(void *p) {
     return CHUNK_SIZE(((chunk *)((char *)p - sizeof(chunk)))->status);
+}
+
+// malloc etc.
+allocator global_allocator = (allocator){
+    .heaps = NULL,
+    .free_chunk_tree = NULL,
+    .mmapped_chunk_head = NULL,
+    .stats = {0},
+    .arenas = {0},
+};
+
+void *_allo_malloc(size_t size) { return allo_cate(&global_allocator, size); }
+
+void _allo_free(void *p) { allo_free(&global_allocator, p); }
+
+void *_allo_realloc(void *p, size_t size) {
+    if (p == NULL)
+        return _allo_malloc(size);
+    if (introspect_size(p) >= size)
+        return p;
+    void *new_p = malloc(size);
+    memcpy(new_p, p, introspect_size(p));
+    free(p);
+    return new_p;
+}
+
+void *_allo_calloc(size_t nmemb, size_t size) {
+    void *p = malloc(nmemb * size);
+    memset(p, 0, nmemb * size);
+    return p;
 }

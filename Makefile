@@ -3,7 +3,7 @@ CFLAGS = -Wall -Wextra -Wpedantic -g -fsanitize=address
 
 all: allo.a
 
-allo.a: allo.o stats.o rb_tree.o
+allo.a: allo.o stats.o rb_tree.o allo.h
 	ar rcs allo.a allo.o stats.o rb_tree.o
 
 allo.o: allo.c allo.h
