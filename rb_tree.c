@@ -289,8 +289,7 @@ free_chunk_tree *rb_tree_remove_node(free_chunk_tree *h, free_chunk *node) {
     ((free_chunk_list *)list->prev_of_size)->next_of_size = list->next_of_size;
 
     if (list->next_of_size != NULL)
-        ((free_chunk_list *)list->next_of_size)->prev_of_size =
-            list->prev_of_size;
+        list->next_of_size->prev_of_size = list->prev_of_size;
 
     return h;
 }

@@ -28,7 +28,7 @@ void debug_printf(const char *fmt, ...) {
 void free_chunk_init(free_chunk *res, size_t size, size_t prev_size) {
     *(free_chunk_tree *)res = (free_chunk_tree){
         .prev_size = prev_size,
-        .status = size | FREE,
+        .status = size | FREE | TREE,
         // set these to null even though its not a tree because we forget to do
         // this elsewhere <3
         .next_of_size = NULL,
@@ -189,24 +189,24 @@ void coalesce(allocator *a, heap_chunk *chunk) {
     uint64_t size = CHUNK_SIZE(chunk->status);
     debug_printf("coalesce: %p (size %lu)\n", chunk, size);
 
+    heap_chunk *next_absolute = next_chunk(chunk);
+    if (next_absolute != NULL && IS_FREE(next_absolute->status)) {
+        a->free_chunk_tree =
+            rb_tree_remove_node(a->free_chunk_tree, next_absolute);
+        size += CHUNK_SIZE(next_absolute->status) + sizeof(heap_chunk);
+    }
+
     heap_chunk *prev = prev_chunk(chunk);
     if (prev && IS_FREE(prev->status)) {
         a->free_chunk_tree = rb_tree_remove_node(a->free_chunk_tree, prev);
         size += CHUNK_SIZE(prev->status) + sizeof(heap_chunk);
         chunk = prev;
     }
-    heap_chunk *next_absolute = next_chunk(chunk);
-    if (next_absolute != NULL && next_absolute->status & FREE) {
-        a->free_chunk_tree =
-            rb_tree_remove_node(a->free_chunk_tree, next_absolute);
-        size += CHUNK_SIZE(next_absolute->status) + sizeof(heap_chunk);
-    } else {
-        if (next_absolute != NULL)
-            next_absolute->prev_size = size;
-    }
 
     // maybe leak some memory
     size &= ~(CHUNK_SIZE_ALIGN - 1);
+    if (next_absolute)
+        next_absolute->prev_size = size;
     free_chunk_init(chunk, size, chunk->prev_size);
 
     a->free_chunk_tree =
