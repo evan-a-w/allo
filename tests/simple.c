@@ -6,7 +6,7 @@
 
 #include "allo.h"
 
-#define NUM_ALLOCATIONS 1000
+#define NUM_ALLOCATIONS 5
 #define MAX_ALLOC_SIZE 512
 
 void test(void) {

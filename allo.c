@@ -122,9 +122,9 @@ void *allo_cate_arena(allocator *a, size_t to_alloc) {
     void *res;
 
     // changes other thing in tree between
-    arena *arena = &a->arenas[get_arena_bucket(to_alloc)];
-    debug_printf("allo_cate_arena: %lu %lu\n", to_alloc,
-                 get_arena_bucket(to_alloc));
+    uint64_t bucket = get_arena_bucket(to_alloc);
+    arena *arena = &a->arenas[bucket];
+    debug_printf("allo_cate_arena: %lu %lu\n", to_alloc, bucket);
 
 try_take_from_free_list:
     if (arena->free_list) {
@@ -138,19 +138,24 @@ try_take_from_free_list:
 
     size_t arena_size = arena_block_size(to_alloc);
     arena_block *block = allo_cate(a, arena_size);
+    block->prev = NULL;
+    block->next = arena->arena_block_head;
+    if (arena->arena_block_head != NULL)
+        arena->arena_block_head->prev = block;
+    arena->arena_block_head = block;
     if (block == NULL) {
         res = NULL;
         goto end;
     }
 
     uint64_t end_of_block = (uint64_t)block + arena_size;
-    arena->free_list = NULL;
-    for (arena_free_chunk *c = (arena_free_chunk *)block->data;
-         (uint64_t)c < end_of_block;
-         c = (arena_free_chunk *)(((chunk *)c)->data + to_alloc)) {
+    arena_free_chunk *c = (arena_free_chunk *)block->data;
+    while ((uint64_t)c + sizeof(chunk) + to_alloc < end_of_block) {
         c->status = to_alloc | FREE;
         c->next = arena->free_list;
         arena->free_list = c;
+
+        c = (arena_free_chunk *)(((chunk *)c)->data + to_alloc);
     }
 
     goto try_take_from_free_list;
@@ -270,6 +275,7 @@ void *allo_cate(allocator *a, size_t size) {
 
     debug_printf("allo_cate result: %p\n", res);
     rb_tree_debug_print(a->free_chunk_tree);
+    debug_printf("END allo_cate: %lu\n", size);
 
     return res;
 }
