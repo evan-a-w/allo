@@ -99,7 +99,6 @@ typedef struct free_chunk_list {
 typedef struct arena_free_chunk {
     size_t status;
     struct arena_free_chunk *next;
-    char data[];
 } arena_free_chunk;
 
 // malloc larger blocks to subdivide for the arenas

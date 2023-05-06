@@ -150,9 +150,8 @@ void print_free_chunk_list(free_chunk_list *list) {
 }
 
 void print_rb_tree_helper(free_chunk_tree *node, int level) {
-    if (node == NULL) {
+    if (node == NULL)
         return;
-    }
 
     print_rb_tree_helper(node->right, level + 1);
 
@@ -160,7 +159,8 @@ void print_rb_tree_helper(free_chunk_tree *node, int level) {
         debug_printf("  ");
     }
 
-    debug_printf("%zu%s: ", CHUNK_SIZE(node->status), is_red(node) ? "R" : "B");
+    debug_printf("%zu l: %p, r: %p: ", CHUNK_SIZE(node->status),
+                 (void *)node->left, (void *)node->right);
     print_free_chunk_list((free_chunk_list *)node);
     debug_printf("\n");
 

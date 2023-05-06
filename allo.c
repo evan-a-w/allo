@@ -105,10 +105,9 @@ uint64_t get_arena_bucket(uint64_t status) {
     if (size <= ARENA_DOUBLING_SIZE)
         return (size - MIN_ALLOC_SIZE) / ARENA_SIZE_ALIGN;
 
-    uint64_t pow_two = sizeof(uint64_t) + __builtin_clzll(size - 1);
-    printf("pow_two for %lu: %lu\n", size, pow_two);
-    return MAX_ARENA_POWER - pow_two
-           + (ARENA_DOUBLING_SIZE - MIN_ALLOC_SIZE) / ARENA_SIZE_ALIGN + 1;
+    int64_t pow_two = sizeof(uint64_t) * 8 - __builtin_clzll(size - 1);
+    return pow_two - ARENA_DOUBLING_POWER
+           + (ARENA_DOUBLING_SIZE - MIN_ALLOC_SIZE) / ARENA_SIZE_ALIGN;
 }
 
 size_t arena_block_size(size_t size) {
@@ -144,10 +143,11 @@ try_take_from_free_list:
         goto end;
     }
 
-    char *end_of_block = (char *)block + arena_size;
+    uint64_t end_of_block = (uint64_t)block + arena_size;
+    arena->free_list = NULL;
     for (arena_free_chunk *c = (arena_free_chunk *)block->data;
-         (char *)c < end_of_block;
-         c = (arena_free_chunk *)(c->data + to_alloc)) {
+         (uint64_t)c < end_of_block;
+         c = (arena_free_chunk *)(((chunk *)c)->data + to_alloc)) {
         c->status = to_alloc | FREE;
         c->next = arena->free_list;
         arena->free_list = c;
@@ -181,22 +181,28 @@ heap_chunk *prev_chunk(heap_chunk *c) {
 }
 
 void coalesce(allocator *a, heap_chunk *chunk) {
-    debug_printf("coalesce: %p (size %lu)\n", chunk, CHUNK_SIZE(chunk->status));
+    uint64_t size = CHUNK_SIZE(chunk->status);
+    debug_printf("coalesce: %p (size %lu)\n", chunk, size);
+
     heap_chunk *prev = prev_chunk(chunk);
-    if (prev && prev->status & FREE) {
+    if (prev && IS_FREE(prev->status)) {
         a->free_chunk_tree = rb_tree_remove_node(a->free_chunk_tree, prev);
-        prev->status += CHUNK_SIZE(chunk->status) + sizeof(heap_chunk);
+        size += CHUNK_SIZE(prev->status) + sizeof(heap_chunk);
         chunk = prev;
     }
     heap_chunk *next_absolute = next_chunk(chunk);
     if (next_absolute != NULL && next_absolute->status & FREE) {
         a->free_chunk_tree =
             rb_tree_remove_node(a->free_chunk_tree, next_absolute);
-        chunk->status += CHUNK_SIZE(next_absolute->status) + sizeof(heap_chunk);
+        size += CHUNK_SIZE(next_absolute->status) + sizeof(heap_chunk);
     } else {
         if (next_absolute != NULL)
-            next_absolute->prev_size = CHUNK_SIZE(chunk->status);
+            next_absolute->prev_size = size;
     }
+
+    // maybe leak some memory
+    size &= ~(CHUNK_SIZE_ALIGN - 1);
+    free_chunk_init(chunk, size, chunk->prev_size);
 
     a->free_chunk_tree =
         rb_tree_insert(a->free_chunk_tree, (free_chunk_tree *)chunk);
@@ -271,16 +277,17 @@ void *allo_cate(allocator *a, size_t size) {
 void allo_free_arena(allocator *a, chunk *ch) {
     if (ch == NULL)
         return;
-    debug_printf("allo_free_arena: %lu\n", CHUNK_SIZE(ch->status));
-    arena *arena = &a->arenas[get_arena_bucket(CHUNK_SIZE(ch->status))];
+    debug_printf("allo_free_arena: %lu\n", ARENA_CHUNK_SIZE(ch->status));
+    arena *arena = &a->arenas[get_arena_bucket(ARENA_CHUNK_SIZE(ch->status))];
     ch->status |= FREE;
     arena_free_chunk *c = (arena_free_chunk *)ch;
     c->next = arena->free_list;
     arena->free_list = c;
 }
-void allo_free_mmaped(allocator *a, chunk *ch) {
-    debug_printf("allo_free_mmaped: %lu\n", CHUNK_SIZE(ch->status));
-    mmapped_chunk *c = (mmapped_chunk *)ch;
+
+void allo_free_mmaped(allocator *a, void *p) {
+    mmapped_chunk *c = (mmapped_chunk *)((char *)p - sizeof(mmapped_chunk));
+    debug_printf("allo_free_mmaped: %lu\n", CHUNK_SIZE(c->status));
 
     if (c->prev) {
         c->prev->next = c->next;
@@ -288,36 +295,33 @@ void allo_free_mmaped(allocator *a, chunk *ch) {
         a->mmapped_chunk_head = c->next;
     }
 
-    if (c->next) {
+    if (c->next)
         c->next->prev = c->prev;
-    }
 
-    size_t size = CHUNK_SIZE(ch->status);
+    size_t size = CHUNK_SIZE(c->status);
     a->stats.num_bytes_allocated -= size;
     munmap(c, size);
 }
 
-void allo_free_standard(allocator *a, chunk *ch) {
+void allo_free_standard(allocator *a, void *p) {
+    heap_chunk *ch = (heap_chunk *)((char *)p - sizeof(heap_chunk));
     debug_printf("allo_free_standard: %lu\n", CHUNK_SIZE(ch->status));
     ch->status |= FREE;
-    coalesce(a, (heap_chunk *)(ch->data - sizeof(heap_chunk)));
+    coalesce(a, ch);
 }
 
 void allo_free(allocator *a, void *p) {
-    if (p == NULL) {
+    if (p == NULL)
         return;
-    }
     chunk *c = (chunk *)((char *)p - sizeof(chunk));
 
     if (ARENA_CHUNK_SIZE(c->status) <= MAX_ARENA_SIZE) {
         allo_free_arena(a, c);
-        return;
     } else if (c->status & MMAPPED) {
-        allo_free_mmaped(a, c);
-        return;
+        allo_free_mmaped(a, p);
+    } else {
+        allo_free_standard(a, p);
     }
-
-    allo_free_standard(a, c);
 }
 
 void initialize_allocator(allocator *a) {

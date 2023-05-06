@@ -6,7 +6,7 @@
 
 #include "allo.h"
 
-#define ALLO_RB_DEBUG
+/* #define ALLO_RB_DEBUG */
 
 free_chunk *rb_tree_search(free_chunk_tree *root, size_t size);
 free_chunk_tree *rb_tree_remove(free_chunk_tree *h, size_t size);

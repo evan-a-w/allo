@@ -24,6 +24,8 @@ void test(void) {
             allocated_memory[i][j] = i;
     }
 
+    printf("---------------- Done allocating --------------\n");
+
     // Free the allocated memory in a random order
     for (int i = 0; i < NUM_ALLOCATIONS; i++) {
         int index_to_free = rand() % NUM_ALLOCATIONS;
