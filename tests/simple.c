@@ -10,7 +10,14 @@
 #define MAX_ALLOC_SIZE 512
 
 void test(void) {
-    srand(time(NULL));
+    /* time_t t = time(NULL); */
+    /* FILE *fp = fopen("./.seed", "w"); */
+    /* fprintf(fp, "%ld\n", t); */
+    /* fclose(fp); */
+    /* srand(t); */
+
+    /* srand(1683459227); */
+    srand(1683459302);
 
     int *allocated_memory[NUM_ALLOCATIONS] = {NULL};
     int sz[NUM_ALLOCATIONS] = {0};
@@ -45,6 +52,9 @@ void test(void) {
         free(allocated_memory[i]);
         allocated_memory[i] = NULL;
     }
+
+    printf("FREEING ALLOCATOR\n");
+    free_allocator(&global_allocator);
 
     printf("Test passed: All memory allocations, data integrity checks, and "
            "frees were successful.\n");

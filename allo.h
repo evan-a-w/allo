@@ -59,8 +59,11 @@ typedef struct mmapped_chunk {
     char data[];
 } mmapped_chunk;
 
+// should be size 32 so alignment isn't aids
+// I guess size_t is bad
 typedef struct heap_chunk {
-    size_t prev_size; // 0 if no prev
+    uint64_t padding[2];
+    struct heap_chunk *prev;
     size_t status;
     char data[];
 } heap_chunk;
@@ -82,7 +85,8 @@ enum chunk_status {
 
 // sorted in an rb tree
 typedef struct free_chunk_tree {
-    size_t prev_size;
+    uint64_t padding[2];
+    heap_chunk *prev;
     size_t status;
     struct free_chunk_list *next_of_size;
     struct free_chunk_tree *left;
@@ -90,7 +94,8 @@ typedef struct free_chunk_tree {
 } free_chunk_tree;
 
 typedef struct free_chunk_list {
-    size_t prev_size;
+    uint64_t padding[2];
+    heap_chunk *prev;
     size_t status;
     struct free_chunk_list *next_of_size;
     free_chunk *prev_of_size;
@@ -117,6 +122,7 @@ typedef struct heap {
     struct heap *prev;
     struct heap *next;
     uint64_t allocated_bytes;
+    uint64_t end_of_heap;
     char free_chunks[];
 } heap;
 

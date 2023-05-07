@@ -1,5 +1,7 @@
 #include "rb_tree.h"
 
+#include <assert.h>
+
 #include "allo.h"
 
 static inline int is_red(free_chunk_tree *node) {
@@ -97,27 +99,24 @@ free_chunk *rb_tree_search(free_chunk_tree *root, size_t size) {
 
 free_chunk_tree *rb_tree_insert(free_chunk_tree *h, free_chunk_tree *new_node) {
     if (h == NULL) {
-        new_node->status |= RED;
-        new_node->status |= TREE;
+        new_node->status = CHUNK_SIZE(new_node->status) | RED | TREE | FREE;
         new_node->left = NULL;
         new_node->right = NULL;
         new_node->next_of_size = NULL;
         return new_node;
     }
 
-    if (is_red(h->left) && is_red(h->right)) {
+    if (is_red(h->left) && is_red(h->right))
         flip_colors(h);
-    }
 
     size_t chunk_size = CHUNK_SIZE(h->status);
     size_t new_chunk_size = CHUNK_SIZE(new_node->status);
 
     if (new_chunk_size == chunk_size) {
-        new_node->right = NULL;
         free_chunk_list *new_list = (free_chunk_list *)new_node;
         new_list->next_of_size = h->next_of_size;
         new_list->prev_of_size = (free_chunk *)h;
-        new_list->status &= ~TREE;
+        new_list->status = CHUNK_SIZE(new_list->status) | FREE;
         if (h->next_of_size != NULL)
             h->next_of_size->prev_of_size = (free_chunk *)new_list;
         h->next_of_size = new_list;
@@ -139,11 +138,18 @@ free_chunk_tree *rb_tree_insert(free_chunk_tree *h, free_chunk_tree *new_node) {
 
 void print_free_chunk_list(free_chunk_list *list) {
     debug_printf("[");
+    int num = 0;
     while (list != NULL) {
         debug_printf("(%zu, %p)", CHUNK_SIZE(list->status), (void *)list);
         list = list->next_of_size;
         if (list != NULL) {
             debug_printf(", ");
+        }
+        num++;
+        if (num > 10) {
+            debug_printf("...");
+            assert(0);
+            break;
         }
     }
     debug_printf("]");
@@ -191,7 +197,7 @@ static free_chunk_tree *delete_min(free_chunk_tree *h) {
     return balance(h);
 }
 
-free_chunk_tree *rb_tree_remove(free_chunk_tree *h, size_t size) {
+free_chunk_tree *_rb_tree_remove(free_chunk_tree *h, size_t size) {
     if (h == NULL)
         return NULL;
     size_t chunk_size = CHUNK_SIZE(h->status);
@@ -199,7 +205,7 @@ free_chunk_tree *rb_tree_remove(free_chunk_tree *h, size_t size) {
     if (size < chunk_size) {
         if (h->left && !is_red(h->left) && !is_red(h->left->left))
             h = move_red_left(h);
-        h->left = rb_tree_remove(h->left, size);
+        h->left = _rb_tree_remove(h->left, size);
     } else {
         if (!is_red(h->left))
             h = rotate_right(h);
@@ -219,11 +225,24 @@ free_chunk_tree *rb_tree_remove(free_chunk_tree *h, size_t size) {
                 x->status &= ~RED;
             h = x;
         } else {
-            h->right = rb_tree_remove(h->right, size);
+            h->right = _rb_tree_remove(h->right, size);
         }
     }
 
     return balance(h);
+}
+
+free_chunk_tree *rb_tree_remove(free_chunk_tree *h, size_t size) {
+    if (h == NULL)
+        return NULL;
+
+    if (!is_red(h->left) && !is_red(h->right))
+        h->status |= RED;
+
+    h = _rb_tree_remove(h, size);
+    if (h != NULL)
+        h->status &= ~RED;
+    return h;
 }
 
 free_chunk_tree *rb_tree_remove_one(free_chunk_tree *h, size_t size,
