@@ -39,6 +39,7 @@ void free_chunk_init(free_chunk *res, size_t size, heap_chunk *prev,
         .status = size | status_bits,
         // set these to null even though its not a tree because we forget to do
         // this elsewhere <3
+        .padding = 0,
         .next_of_size = NULL,
         .left = NULL,
         .right = NULL,
