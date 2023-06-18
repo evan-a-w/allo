@@ -39,10 +39,10 @@ void free_chunk_init(free_chunk *res, size_t size, heap_chunk *prev,
         .status = size | status_bits,
         // set these to null even though its not a tree because we forget to do
         // this elsewhere <3
-        .padding = 0,
+        .height = 0,
         .next_of_size = NULL,
-        .left = NULL,
-        .right = NULL,
+        .child = {0},
+        .parent = NULL,
     };
 }
 
@@ -209,6 +209,7 @@ void coalesce(allocator *a, heap_chunk *chunk) {
     heap_chunk *prev = prev_chunk(chunk);
     if (prev && IS_FREE(prev->status)) {
         a->free_chunk_tree = rb_tree_remove_node(a->free_chunk_tree, prev);
+        printf("hereeqwekqwlejwqkejqw\n");
         rb_tree_debug_print(a->free_chunk_tree);
         printf("-      - - -heree\n");
         size += CHUNK_SIZE(prev->status) + sizeof(heap_chunk);
@@ -365,6 +366,18 @@ void initialize_allocator(allocator *a) {
 }
 
 void free_allocator(allocator *a) {
+    for (size_t i = 0; i < NUM_ARENA_BUCKETS; i++) {
+        arena *arena = &a->arenas[i];
+        arena_block *block_next = NULL;
+        for (arena_block *b = arena->arena_block_head; b != NULL;
+             b = block_next) {
+            block_next = b->next;
+            allo_free(a, b);
+        }
+        arena->arena_block_head = NULL;
+        arena->free_list = NULL;
+    }
+
     heap *heap_next;
     for (heap *h = a->heaps; h != NULL; h = heap_next) {
         heap_next = h->next;

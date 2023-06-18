@@ -86,13 +86,13 @@ enum chunk_status {
 
 // sorted in an rb tree
 typedef struct free_chunk_tree {
-    uint64_t padding;
+    uint64_t height;
     struct free_chunk_list *next_of_size;
     heap_chunk *prev;
     size_t status;
     struct free_chunk_tree *parent;
     // 0 for left, 1 for right
-    struct free_chunk_tree *children[2];
+    struct free_chunk_tree *child[2];
 } free_chunk_tree;
 
 typedef struct free_chunk_list {
