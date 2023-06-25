@@ -1,4 +1,4 @@
-CC = clang
+CC = gcc
 CFLAGS = -Wall -Wextra -Wpedantic -g -fsanitize=address -I..
 
 test_simple: simple.exe
