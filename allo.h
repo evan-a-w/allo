@@ -69,6 +69,9 @@ typedef struct heap_chunk {
     char data[];
 } heap_chunk;
 
+#define SIZE(node) (CHUNK_SIZE(node->status))
+#define SSIZE(node) ((int64_t)CHUNK_SIZE(node->status))
+
 typedef heap_chunk free_chunk;
 
 enum chunk_status {

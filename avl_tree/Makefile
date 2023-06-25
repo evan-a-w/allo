@@ -1,4 +1,4 @@
-CC = clang
+CC = gcc
 CFLAGS = -Wall -Wextra -Wpedantic -g -fsanitize=address -I..
 
 avl_tree.o: avl_tree.c avl_tree.h ../allo.h

@@ -37,7 +37,7 @@ void test_avl_tree_remove(void) {
     // Removing and checking for absence
     for (unsigned i = 0; i < TEST_SIZE; i++) {
         root = avl_tree_remove(root, i * 32);
-        for (unsigned j = 0; j < i; j++) {
+        for (unsigned j = i + 1; j < TEST_SIZE; j++) {
             node *search = avl_tree_search(root, j * 32);
             assert(search && CHUNK_SIZE(search->status) == j * 32);
         }
