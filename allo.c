@@ -88,14 +88,6 @@ void print_allocator_state(allocator *a) {
             debug_printf("      %zu %p (%s)\n", SIZE(c), (void *)c,
                          (c->status & FREE) ? "free" : "used");
     }
-    /* printf("  arenas:\n"); */
-    /* for (size_t i = 0; i < NUM_ARENA_BUCKETS; i++) { */
-    /*     printf("    %lu:\n", i); */
-    /*     for (arena_block *b = a->arenas[i].arena_block_head; b != NULL; */
-    /*          b = b->next) { */
-    /*         printf("      %p\n", (void *)b); */
-    /*     } */
-    /* } */
 }
 
 uint64_t round_to_alloc_size_without_metadata(size_t n) {
@@ -439,14 +431,14 @@ void *_allo_realloc(void *p, size_t size) {
         return _allo_malloc(size);
     if (introspect_size(p) >= size)
         return p;
-    void *new_p = malloc(size);
+    void *new_p = _allo_malloc(size);
     memcpy(new_p, p, introspect_size(p));
-    free(p);
+    _allo_free(p);
     return new_p;
 }
 
 void *_allo_calloc(size_t nmemb, size_t size) {
-    void *p = malloc(nmemb * size);
+    void *p = _allo_malloc(nmemb * size);
     memset(p, 0, nmemb * size);
     return p;
 }
