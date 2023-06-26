@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -Wpedantic -g -fsanitize=address -I.. -lm
 
-all: test_simple test_hash
+all: test_simple test_hash test_lzw
 
 test_simple: simple.exe
 	unbuffer ./simple.exe
@@ -27,7 +27,7 @@ ldecode.exe: ldecode.c ../allo.a
 .allo.c.decoded: ldecode.exe .allo.c.encoded
 	./ldecode.exe .allo.c.encoded .allo.c.decoded
 
-lzw_test: .allo.c.decoded
+test_lzw: .allo.c.decoded
 	diff ../allo.c .allo.c.decoded
 
 ../allo.a:
