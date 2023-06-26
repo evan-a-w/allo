@@ -3,8 +3,8 @@ CFLAGS = -Wall -Wextra -Wpedantic -g -fsanitize=address
 
 all: allo.a
 
-allo.a: allo.o stats.o rb_tree.o allo.h
-	ar rcs allo.a allo.o stats.o rb_tree.o
+allo.a: allo.o stats.o avl_tree/avl_tree.o allo.h
+	ar rcs allo.a allo.o stats.o avl_tree/avl_tree.o
 
 allo.o: allo.c allo.h
 	$(CC) $(CFLAGS) allo.c -c -o allo.o
@@ -12,8 +12,8 @@ allo.o: allo.c allo.h
 stats.o: stats.c stats.h
 	$(CC) $(CFLAGS) stats.c -c -o stats.o
 
-rb_tree.o: rb_tree.c rb_tree.h
-	$(CC) $(CFLAGS) rb_tree.c -c -o rb_tree.o
+avl_tree/avl_tree.o: avl_tree/avl_tree.c avl_tree/avl_tree.h
+	make -Cavl_tree
 
 clean:
-	rm -f *.exe *.o *.a; make -C tests clean
+	rm -f *.exe *.o *.a; make -C tests clean; make -C avl_tree clean

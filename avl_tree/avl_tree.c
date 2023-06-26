@@ -1,6 +1,7 @@
 #include "avl_tree.h"
 
 #include <assert.h>
+#include <stdbool.h>
 
 #include "../allo.h"
 
@@ -57,8 +58,7 @@ free_chunk *avl_tree_search(free_chunk_tree *root, size_t size) {
 
 free_chunk_tree *init(free_chunk_tree *node) {
     node->height = 1;
-    node->status |= TREE;
-    node->parent = NULL;
+    node->status |= TREE | FREE;
     node->next_of_size = NULL;
     node->child[LEFT] = NULL;
     node->child[RIGHT] = NULL;
@@ -108,6 +108,7 @@ free_chunk_tree *avl_tree_insert(free_chunk_tree *h,
         free_chunk_list *l = h->next_of_size;
 
         free_chunk_list *new_list = (free_chunk_list *)init(new_node);
+        new_list->status &= ~TREE;
         l->next_of_size = new_list;
         new_list->next_of_size = l;
         new_list->prev_of_size = (free_chunk *)h;
@@ -157,9 +158,16 @@ free_chunk_tree *avl_tree_remove(free_chunk_tree *h, size_t size) {
         } else {
             free_chunk_tree *parent = NULL;
             free_chunk_tree *min = min_elt(h->right, h, &parent);
-            full_switch(h, min);
             if (parent != h)
                 parent->left = h;
+            free_chunk_tree *tmp = h->right;
+            h->right = min->right;
+            if (min != tmp)
+                min->right = tmp;
+            else
+                min->right = NULL;
+            min->left = h->left;
+            h->left = NULL;
             min->right = avl_tree_remove(min->right, SIZE(h));
             return rebalance(min);
         }
@@ -211,17 +219,31 @@ void print_avl_tree_helper(free_chunk_tree *node, int level) {
 
     print_avl_tree_helper(node->child[RIGHT], level + 1);
 
-    for (int i = 0; i < level; ++i) {
+    for (int i = 0; i < level * 2; ++i) {
         debug_printf("  ");
     }
 
-    debug_printf("%zu l: %p, r: %p, p: %p: ", CHUNK_SIZE(node->status),
-                 (void *)node->child[LEFT], (void *)node->child[RIGHT],
-                 node->parent);
-    print_free_chunk_list((free_chunk_list *)node);
+    debug_printf("%zu (%p) l: %p, r: %p", CHUNK_SIZE(node->status),
+                 (void *)node, (void *)node->child[LEFT],
+                 (void *)node->child[RIGHT]);
+    print_free_chunk_list(node->next_of_size);
     debug_printf("\n");
 
     print_avl_tree_helper(node->child[LEFT], level + 1);
+}
+
+bool avl_tree_contains(tree_node *root, node *node) {
+    if (root == NULL)
+        return false;
+    if ((void *)root == (void *)node)
+        return true;
+    for (free_chunk_list *l = root->next_of_size; l != NULL;
+         l = l->next_of_size) {
+        if ((void *)l == (void *)node)
+            return true;
+    }
+    return avl_tree_contains(root->left, node)
+           || avl_tree_contains(root->right, node);
 }
 
 void avl_tree_debug_print(free_chunk_tree *root) {

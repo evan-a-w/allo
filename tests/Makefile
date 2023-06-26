@@ -1,5 +1,7 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -Wpedantic -g -fsanitize=address -I..
+CFLAGS = -Wall -Wextra -Wpedantic -g -fsanitize=address -I.. -lm
+
+all: test_simple test_hash
 
 test_simple: simple.exe
 	unbuffer ./simple.exe

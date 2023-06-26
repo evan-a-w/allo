@@ -6,7 +6,7 @@
 
 #include "stats.h"
 
-#define __ALLO_DEBUG_PRINT
+/* #define __ALLO_DEBUG_PRINT */
 #define ALLO_OVERRIDE_MALLOC
 
 // Arenas are allocated for all sizes <= 1024 bytes.
@@ -62,7 +62,7 @@ typedef struct mmapped_chunk {
 // should be size 32 so alignment isn't aids
 // I guess size_t is bad
 typedef struct heap_chunk {
-    uint64_t padding;
+    uint64_t _padding;
     struct free_chunk_list *next_of_size;
     struct heap_chunk *prev;
     size_t status;
@@ -76,13 +76,11 @@ typedef heap_chunk free_chunk;
 
 enum chunk_status {
     FREE = 1,
-    RED = 2,
-    TREE = 4,
+    TREE = 2,
     MMAPPED = 8,
 };
 
 #define IS_ARENA(status) ((status)&ARENA)
-#define IS_RED(status) ((status)&RED)
 #define IS_TREE(status) ((status)&TREE)
 #define IS_FREE(status) ((status)&FREE)
 #define IS_MMAPPED(status) ((status)&MMAPPED)
@@ -93,7 +91,6 @@ typedef struct free_chunk_tree {
     struct free_chunk_list *next_of_size;
     heap_chunk *prev;
     size_t status;
-    struct free_chunk_tree *parent;
     // 0 for left, 1 for right
     struct free_chunk_tree *child[2];
 } free_chunk_tree;

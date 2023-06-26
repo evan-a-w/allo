@@ -8,7 +8,7 @@
 #include <sys/mman.h>
 #include <assert.h>
 
-#include "rb_tree.h"
+#include "avl_tree/avl_tree.h"
 #include "stats.h"
 
 #ifdef __ALLO_DEBUG_PRINT
@@ -37,12 +37,9 @@ void free_chunk_init(free_chunk *res, size_t size, heap_chunk *prev,
     *(free_chunk_tree *)res = (free_chunk_tree){
         .prev = prev,
         .status = size | status_bits,
-        // set these to null even though its not a tree because we forget to do
-        // this elsewhere <3
         .height = 0,
         .next_of_size = NULL,
         .child = {0},
-        .parent = NULL,
     };
 }
 
@@ -70,6 +67,35 @@ free_chunk *add_heap(allocator *a) {
     debug_printf("add_heap: %p\n", h);
 
     return res;
+}
+
+heap_chunk *next_chunk(allocator *a, heap_chunk *c);
+
+void print_allocator_state(allocator *a) {
+    printf("allocator state:\n");
+    printf("  heaps:\n");
+    for (heap *h = a->heaps; h != NULL; h = h->next) {
+        printf("    %p\n", (void *)h);
+    }
+    printf("  mmapped chunks:\n");
+    for (mmapped_chunk *c = a->mmapped_chunk_head; c != NULL; c = c->next) {
+        printf("    %p\n", (void *)c);
+    }
+    printf("  heap chunks:\n");
+    for (heap *h = a->heaps; h != NULL; h = h->next) {
+        for (free_chunk *c = (free_chunk *)h->free_chunks; c != NULL;
+             c = next_chunk(a, c))
+            debug_printf("      %zu %p (%s)\n", SIZE(c), (void *)c,
+                         (c->status & FREE) ? "free" : "used");
+    }
+    /* printf("  arenas:\n"); */
+    /* for (size_t i = 0; i < NUM_ARENA_BUCKETS; i++) { */
+    /*     printf("    %lu:\n", i); */
+    /*     for (arena_block *b = a->arenas[i].arena_block_head; b != NULL; */
+    /*          b = b->next) { */
+    /*         printf("      %p\n", (void *)b); */
+    /*     } */
+    /* } */
 }
 
 uint64_t round_to_alloc_size_without_metadata(size_t n) {
@@ -171,7 +197,7 @@ try_take_from_free_list:
 
     goto try_take_from_free_list;
 end:
-    rb_tree_debug_print(a->free_chunk_tree);
+    avl_tree_debug_print(a->free_chunk_tree);
     debug_printf("END allo_cate_arena: %lu %lu\n", to_alloc,
                  get_arena_bucket(to_alloc));
     return res;
@@ -203,15 +229,16 @@ heap_chunk *prev_chunk(heap_chunk *c) {
 
 // chunk is not yet in the tree
 void coalesce(allocator *a, heap_chunk *chunk) {
+#ifdef ALLO_AVL_DEBUG
+    assert(!avl_tree_contains(a->free_chunk_tree, chunk));
+#endif
+
     uint64_t size = CHUNK_SIZE(chunk->status);
     debug_printf("coalesce: %p (size %lu)\n", chunk, size);
 
     heap_chunk *prev = prev_chunk(chunk);
     if (prev && IS_FREE(prev->status)) {
-        a->free_chunk_tree = rb_tree_remove_node(a->free_chunk_tree, prev);
-        printf("hereeqwekqwlejwqkejqw\n");
-        rb_tree_debug_print(a->free_chunk_tree);
-        printf("-      - - -heree\n");
+        a->free_chunk_tree = avl_tree_remove_node(a->free_chunk_tree, prev);
         size += CHUNK_SIZE(prev->status) + sizeof(heap_chunk);
         chunk = prev;
         chunk->status = size;
@@ -225,7 +252,7 @@ void coalesce(allocator *a, heap_chunk *chunk) {
         if (next_again)
             next_again->prev = chunk;
         a->free_chunk_tree =
-            rb_tree_remove_node(a->free_chunk_tree, next_absolute);
+            avl_tree_remove_node(a->free_chunk_tree, next_absolute);
         size += CHUNK_SIZE(next_absolute->status) + sizeof(heap_chunk);
     } else if (next_absolute) {
         next_absolute->prev = chunk;
@@ -236,8 +263,8 @@ void coalesce(allocator *a, heap_chunk *chunk) {
     free_chunk_init(chunk, size, chunk->prev, FREE | TREE);
 
     a->free_chunk_tree =
-        rb_tree_insert(a->free_chunk_tree, (free_chunk_tree *)chunk);
-    rb_tree_debug_print(a->free_chunk_tree);
+        avl_tree_insert(a->free_chunk_tree, (free_chunk_tree *)chunk);
+    avl_tree_debug_print(a->free_chunk_tree);
 
     debug_printf("END coalesce: %p (size %lu)\n", chunk,
                  CHUNK_SIZE(chunk->status));
@@ -245,14 +272,14 @@ void coalesce(allocator *a, heap_chunk *chunk) {
 
 void *allo_cate_standard(allocator *a, size_t to_alloc) {
     debug_printf("allo_cate: standard %lu\n", to_alloc);
-    free_chunk *best_fit = rb_tree_search(a->free_chunk_tree, to_alloc);
+    free_chunk *best_fit = avl_tree_search(a->free_chunk_tree, to_alloc);
 
     if (best_fit == NULL) {
         best_fit = add_heap(a);
         if (best_fit == NULL)
             return NULL;
     } else {
-        a->free_chunk_tree = rb_tree_remove_node(a->free_chunk_tree, best_fit);
+        a->free_chunk_tree = avl_tree_remove_node(a->free_chunk_tree, best_fit);
     }
 
     best_fit->status &= ~(FREE | TREE);
@@ -284,7 +311,7 @@ void *allo_cate_standard(allocator *a, size_t to_alloc) {
 
 void *allo_cate(allocator *a, size_t size) {
     debug_printf("allo_cate: %lu\n", size);
-    rb_tree_debug_print(a->free_chunk_tree);
+    avl_tree_debug_print(a->free_chunk_tree);
 
     void *res = NULL;
 
@@ -298,7 +325,7 @@ void *allo_cate(allocator *a, size_t size) {
     }
 
     debug_printf("allo_cate result: %p\n", res);
-    rb_tree_debug_print(a->free_chunk_tree);
+    avl_tree_debug_print(a->free_chunk_tree);
     debug_printf("END allo_cate: %lu\n", size);
 
     return res;
@@ -393,7 +420,7 @@ void free_allocator(allocator *a) {
     a->heaps = NULL;
     initialize_stats(&a->stats);
 
-    rb_tree_debug_print(a->free_chunk_tree);
+    avl_tree_debug_print(a->free_chunk_tree);
 }
 
 size_t introspect_size(void *p) {
@@ -401,13 +428,7 @@ size_t introspect_size(void *p) {
 }
 
 // malloc etc.
-allocator global_allocator = (allocator){
-    .heaps = NULL,
-    .free_chunk_tree = NULL,
-    .mmapped_chunk_head = NULL,
-    .stats = {0},
-    .arenas = {0},
-};
+allocator global_allocator = {0};
 
 void *_allo_malloc(size_t size) { return allo_cate(&global_allocator, size); }
 
