@@ -16,6 +16,8 @@ void test(void) {
     fclose(fp);
     srand(t);
 
+    /* srand(1687792668); */
+
     int *allocated_memory[NUM_ALLOCATIONS] = {NULL};
     int sz[NUM_ALLOCATIONS] = {0};
 
