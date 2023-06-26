@@ -206,7 +206,6 @@ void print_free_chunk_list(free_chunk_list *list) {
         num++;
         if (num > 10) {
             debug_printf("...");
-            assert(0);
             break;
         }
     }

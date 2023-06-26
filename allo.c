@@ -26,10 +26,27 @@ void debug_printf(const char *fmt, ...) {
 #endif
 }
 
+#ifdef __ALLO_DEBUG_ASSERT
+#define debug_assert(cond) assert(cond)
+#else
+#define debug_assert(cond)                                                     \
+    do {                                                                       \
+    } while (0)
+#endif
+
 chunk *to_chunk(void *p) { return (chunk *)((char *)p - sizeof(chunk)); }
 
 heap_chunk *to_heap_chunk(void *p) {
     return (heap_chunk *)((char *)p - sizeof(heap_chunk));
+}
+
+heap *get_heap(allocator *a, void *p) {
+    for (heap *h = a->heaps; h != NULL; h = h->next) {
+        if ((uint64_t)h->free_chunks <= (uint64_t)p
+            && (uint64_t)p < h->end_of_heap)
+            return h;
+    }
+    return NULL;
 }
 
 void free_chunk_init(free_chunk *res, size_t size, heap_chunk *prev,
@@ -41,6 +58,13 @@ void free_chunk_init(free_chunk *res, size_t size, heap_chunk *prev,
         .next_of_size = NULL,
         .child = {0},
     };
+}
+
+bool same_heap(allocator *a, void *p1, void *p2) {
+    heap *h1 = get_heap(a, p1);
+    if (h1 == NULL)
+        return false;
+    return h1 == get_heap(a, p2);
 }
 
 free_chunk *add_heap(allocator *a) {
@@ -60,34 +84,53 @@ free_chunk *add_heap(allocator *a) {
     free_chunk *res = (free_chunk *)h->free_chunks;
 
     size_t chunk_size = HEAP_SIZE - sizeof(heap) - sizeof(heap_chunk);
-    assert(chunk_size == CHUNK_SIZE(chunk_size));
+    debug_assert(chunk_size == CHUNK_SIZE(chunk_size));
 
-    free_chunk_init(res, chunk_size, 0, 0);
+    free_chunk_init(res, chunk_size, NULL, FREE);
 
     debug_printf("add_heap: %p\n", h);
 
     return res;
 }
 
-heap_chunk *next_chunk(allocator *a, heap_chunk *c);
+heap_chunk *next_chunk_no_print(allocator *a, heap_chunk *c) {
+    heap_chunk *next = (heap_chunk *)(c->data + CHUNK_SIZE(c->status));
+    next = same_heap(a, c, next) ? next : NULL;
+    return next;
+}
 
-void print_allocator_state(allocator *a) {
+void print_free_chunk_for_debug(free_chunk *c) {
+    printf("      %zu %p (%s)\n", SIZE(c), (void *)c,
+           (c->status & FREE) ? "free" : "used");
+}
+
+void debug_print_allocator_state(allocator *a) {
+#ifdef __ALLO_STATE_DEBUG
     printf("allocator state:\n");
-    printf("  heaps:\n");
-    for (heap *h = a->heaps; h != NULL; h = h->next) {
-        printf("    %p\n", (void *)h);
-    }
     printf("  mmapped chunks:\n");
     for (mmapped_chunk *c = a->mmapped_chunk_head; c != NULL; c = c->next) {
         printf("    %p\n", (void *)c);
     }
     printf("  heap chunks:\n");
     for (heap *h = a->heaps; h != NULL; h = h->next) {
-        for (free_chunk *c = (free_chunk *)h->free_chunks; c != NULL;
-             c = next_chunk(a, c))
-            debug_printf("      %zu %p (%s)\n", SIZE(c), (void *)c,
-                         (c->status & FREE) ? "free" : "used");
+        debug_assert((uint64_t)h->prev != 0x1);
+        printf("  HEAP  %p (prev %p, next %p) from %p to %p\n", (void *)h,
+               (void *)h->prev, (void *)h->next, (void *)h->free_chunks,
+               (void *)h->end_of_heap);
+        free_chunk *first = (free_chunk *)h->free_chunks;
+        free_chunk *prev = first;
+
+        if (!IS_FREE(first->status))
+            print_free_chunk_for_debug(first);
+        for (free_chunk *c = first; c != NULL;
+             prev = c, c = next_chunk_no_print(a, c)) {
+            if (IS_FREE(c->status))
+                print_free_chunk_for_debug(c);
+        }
+        if (prev != first && !IS_FREE(prev->status))
+            print_free_chunk_for_debug(prev);
     }
+#endif
 }
 
 uint64_t round_to_alloc_size_without_metadata(size_t n) {
@@ -195,18 +238,6 @@ end:
     return res;
 }
 
-heap *get_heap(allocator *a, void *p) {
-    for (heap *h = a->heaps; h != NULL; h = h->next) {
-        if ((uint64_t)h <= (uint64_t)p && (uint64_t)p < h->end_of_heap)
-            return h;
-    }
-    return NULL;
-}
-
-bool same_heap(allocator *a, void *p1, void *p2) {
-    return get_heap(a, p1) == get_heap(a, p2);
-}
-
 heap_chunk *next_chunk(allocator *a, heap_chunk *c) {
     heap_chunk *next = (heap_chunk *)(c->data + CHUNK_SIZE(c->status));
     next = same_heap(a, c, next) ? next : NULL;
@@ -222,7 +253,7 @@ heap_chunk *prev_chunk(heap_chunk *c) {
 // chunk is not yet in the tree
 void coalesce(allocator *a, heap_chunk *chunk) {
 #ifdef ALLO_AVL_DEBUG
-    assert(!avl_tree_contains(a->free_chunk_tree, chunk));
+    debug_assert(!avl_tree_contains(a->free_chunk_tree, chunk));
 #endif
 
     uint64_t size = CHUNK_SIZE(chunk->status);
@@ -236,7 +267,7 @@ void coalesce(allocator *a, heap_chunk *chunk) {
         chunk->status = size;
     }
 
-    assert(size == CHUNK_SIZE(size));
+    debug_assert(size == CHUNK_SIZE(size));
 
     heap_chunk *next_absolute = next_chunk(a, chunk);
     if (next_absolute && IS_FREE(next_absolute->status)) {
@@ -250,7 +281,7 @@ void coalesce(allocator *a, heap_chunk *chunk) {
         next_absolute->prev = chunk;
     }
 
-    assert(size == CHUNK_SIZE(size));
+    debug_assert(size == CHUNK_SIZE(size));
 
     free_chunk_init(chunk, size, chunk->prev, FREE | TREE);
 
@@ -280,16 +311,18 @@ void *allo_cate_standard(allocator *a, size_t to_alloc) {
     size_t leftover = CHUNK_SIZE(best_fit->status) - to_alloc;
     if (leftover > sizeof(heap_chunk) + MAX_ARENA_SIZE) {
         leftover -= sizeof(heap_chunk);
-        assert(leftover == CHUNK_SIZE(leftover));
+        debug_assert(leftover == CHUNK_SIZE(leftover));
 
         size_t new_size = CHUNK_SIZE(best_fit->status) - leftover;
-        assert(new_size == CHUNK_SIZE(new_size));
+        debug_assert(new_size == CHUNK_SIZE(new_size));
 
         debug_printf("Split node of size %lu into %lu and %lu\n",
                      CHUNK_SIZE(best_fit->status), new_size, leftover);
 
+        size_t flags = best_fit->status & (MMAPPED | FREE | TREE);
+        best_fit->status = new_size | flags;
         free_chunk *split_chunk = (free_chunk *)(best_fit->data + new_size);
-        free_chunk_init(split_chunk, leftover, best_fit, FREE | TREE);
+        free_chunk_init(split_chunk, leftover, best_fit, FREE);
 
         coalesce(a, split_chunk);
 
@@ -303,6 +336,7 @@ void *allo_cate_standard(allocator *a, size_t to_alloc) {
 
 void *allo_cate(allocator *a, size_t size) {
     debug_printf("allo_cate: %lu\n", size);
+    debug_print_allocator_state(a);
     avl_tree_debug_print(a->free_chunk_tree);
 
     void *res = NULL;
@@ -438,7 +472,6 @@ void *_allo_realloc(void *p, size_t size) {
 }
 
 void *_allo_calloc(size_t nmemb, size_t size) {
-    printf("CALLOC\n");
     void *p = _allo_malloc(nmemb * size);
     memset(p, 0, nmemb * size);
     return p;

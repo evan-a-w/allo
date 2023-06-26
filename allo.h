@@ -7,6 +7,8 @@
 #include "stats.h"
 
 #define __ALLO_DEBUG_PRINT
+#define __ALLO_STATE_DEBUG
+#define __ALLO_DEBUG_ASSERT
 #define ALLO_OVERRIDE_MALLOC
 
 // Arenas are allocated for all sizes <= 1024 bytes.
@@ -77,7 +79,7 @@ typedef heap_chunk free_chunk;
 enum chunk_status {
     FREE = 1,
     TREE = 2,
-    MMAPPED = 8,
+    MMAPPED = 4,
 };
 
 #define IS_ARENA(status) ((status)&ARENA)
