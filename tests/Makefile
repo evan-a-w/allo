@@ -15,10 +15,25 @@ hash_table.exe: hash_table.c ../allo.a hash_table.h
 simple.exe: simple.c ../allo.a
 	$(CC) $(CFLAGS) simple.c ../allo.a -o simple.exe
 
+lencode.exe: lencode.c ../allo.a
+	$(CC) $(CFLAGS) lencode.c ../allo.a -o lencode.exe
+
+ldecode.exe: ldecode.c ../allo.a
+	$(CC) $(CFLAGS) ldecode.c ../allo.a -o ldecode.exe
+
+.allo.c.encoded: lencode.exe
+	./lencode.exe ../allo.c .allo.c.encoded
+
+.allo.c.decoded: ldecode.exe .allo.c.encoded
+	./ldecode.exe .allo.c.encoded .allo.c.decoded
+
+lzw_test: .allo.c.decoded
+	diff ../allo.c .allo.c.decoded
+
 ../allo.a:
 	$(MAKE) -C..
 
 .PHONY: ../allo.a
 
 clean:
-	rm -f *.exe *.o *.a
+	rm -f *.exe *.o *.a *.encoded *.decoded

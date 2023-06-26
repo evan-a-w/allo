@@ -10,13 +10,13 @@
 #define MAX_ALLOC_SIZE 512
 
 void test(void) {
-    time_t t = time(NULL);
-    FILE *fp = fopen("./.seed", "w");
-    fprintf(fp, "%ld\n", t);
-    fclose(fp);
-    srand(t);
+    /* time_t t = time(NULL); */
+    /* FILE *fp = fopen("./.seed", "w"); */
+    /* fprintf(fp, "%ld\n", t); */
+    /* fclose(fp); */
+    /* srand(t); */
 
-    /* srand(1687792668); */
+    srand(1687792668);
 
     int *allocated_memory[NUM_ALLOCATIONS] = {NULL};
     int sz[NUM_ALLOCATIONS] = {0};

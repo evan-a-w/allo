@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -Wpedantic -g -fsanitize=address
+CFLAGS = -Wall -Wextra -Wpedantic -g -fsanitize=address -DDIE
 
 all: allo.a
 
