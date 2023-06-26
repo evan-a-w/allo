@@ -438,6 +438,7 @@ void *_allo_realloc(void *p, size_t size) {
 }
 
 void *_allo_calloc(size_t nmemb, size_t size) {
+    printf("CALLOC\n");
     void *p = _allo_malloc(nmemb * size);
     memset(p, 0, nmemb * size);
     return p;

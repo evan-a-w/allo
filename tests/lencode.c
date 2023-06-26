@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <assert.h>
 
+#include "../allo.h"
+
 const uint32_t CODE_MAX = (1u << 15) - 1;
 
 typedef struct trie_node {
