@@ -7,7 +7,7 @@
 #include "stats.h"
 
 /* #define __ALLO_DEBUG_PRINT */
-#define ALLO_OVERRIDE_MALLOC
+/* #define ALLO_OVERRIDE_MALLOC */
 
 // Arenas are allocated for all sizes <= 1024 bytes.
 // sizes are powers of two when >= 124 bytes
