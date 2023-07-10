@@ -41,10 +41,12 @@ heap_chunk *to_heap_chunk(void *p) {
 }
 
 heap *get_heap(allocator *a, void *p) {
+    uint64_t addr = (uint64_t)p;
     for (heap *h = a->heaps; h != NULL; h = h->next) {
-        if ((uint64_t)h->free_chunks <= (uint64_t)p
-            && (uint64_t)p < h->end_of_heap)
+        if ((uint64_t)h->free_chunks <= addr && addr < h->end_of_heap)
             return h;
+
+        /* debug_assert(addr < (uint64_t)h || addr >= h->end_of_heap); */
     }
     return NULL;
 }
@@ -120,15 +122,20 @@ void debug_print_allocator_state(allocator *a) {
         free_chunk *first = (free_chunk *)h->free_chunks;
         free_chunk *prev = first;
 
+        uint64_t used_bytes = 0;
         if (!IS_FREE(first->status))
             print_free_chunk_for_debug(first);
         for (free_chunk *c = first; c != NULL;
              prev = c, c = next_chunk_no_print(a, c)) {
             if (IS_FREE(c->status))
                 print_free_chunk_for_debug(c);
+            else {
+                used_bytes += SIZE(c);
+            }
         }
         if (prev != first && !IS_FREE(prev->status))
             print_free_chunk_for_debug(prev);
+        printf("  (with %lu unprinted used bytes)\n  END HEAP\n", used_bytes);
     }
 #endif
 }
@@ -308,13 +315,14 @@ void *allo_cate_standard(allocator *a, size_t to_alloc) {
     best_fit->status &= ~(FREE | TREE);
 
     // try split node
-    size_t leftover = CHUNK_SIZE(best_fit->status) - to_alloc;
+    size_t leftover = SIZE(best_fit) - to_alloc;
     if (leftover > sizeof(heap_chunk) + MAX_ARENA_SIZE) {
-        leftover -= sizeof(heap_chunk);
-        debug_assert(leftover == CHUNK_SIZE(leftover));
-
         size_t new_size = CHUNK_SIZE(best_fit->status) - leftover;
         debug_assert(new_size == CHUNK_SIZE(new_size));
+
+        leftover -= sizeof(heap_chunk);
+        // alignment
+        debug_assert(leftover == CHUNK_SIZE(leftover));
 
         debug_printf("Split node of size %lu into %lu and %lu\n",
                      CHUNK_SIZE(best_fit->status), new_size, leftover);
