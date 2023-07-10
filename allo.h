@@ -11,14 +11,15 @@
 /* #define __ALLO_DEBUG_ASSERT */
 #define ALLO_OVERRIDE_MALLOC
 
-// Arenas are allocated for all sizes <= 1024 bytes.
+// Arenas are allocated for all sizes <= MAX_ARENA_SIZE bytes.
 // sizes are powers of two when >= 124 bytes
 #define MAX_ARENA_POWER (10)
 #define MAX_ARENA_SIZE (1 << MAX_ARENA_POWER)
 #define ARENA_DOUBLING_POWER (7)
 #define ARENA_DOUBLING_SIZE (1 << ARENA_DOUBLING_POWER)
 #define NUM_ARENA_BUCKETS                                                      \
-    ((ARENA_DOUBLING_SIZE / 8) - (MIN_ALLOC_SIZE / 8 - 1)                      \
+    ((ARENA_DOUBLING_SIZE / ARENA_SIZE_ALIGN)                                  \
+     - (MIN_ALLOC_SIZE / ARENA_SIZE_ALIGN - 1)                                 \
      + (MAX_ARENA_POWER - ARENA_DOUBLING_POWER))
 
 #define PAGE_SIZE 4096
