@@ -21,17 +21,20 @@ lencode.exe: lencode.c ../allo.a
 ldecode.exe: ldecode.c ../allo.a
 	$(CC) $(CFLAGS) ldecode.c ../allo.a -o ldecode.exe
 
-.allo.c.encoded: lencode.exe
-	./lencode.exe ../allo.c .allo.c.encoded
+bible.txt:
+	cp ~/crypt/bible.txt .
 
-.allo.c.decoded: ldecode.exe .allo.c.encoded
-	./ldecode.exe .allo.c.encoded .allo.c.decoded
+bible.encoded: lencode.exe bible.txt
+	./lencode.exe bible.txt bible.encoded
 
-test_lzw: .allo.c.decoded
-	diff ../allo.c .allo.c.decoded
+bible.decoded: ldecode.exe bible.encoded
+	./ldecode.exe bible.encoded bible.decoded
+
+test_lzw: bible.decoded
+	diff bible.txt bible.decoded
 
 ../allo.a:
-	$(MAKE) -C..
+	$(MAKE) -C.. CFLAGS="$(CFLAGS)"
 
 .PHONY: ../allo.a
 
